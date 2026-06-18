@@ -1,0 +1,21 @@
+# Build output
+/build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Downloaded artifacts
+*.tar.xz
+*.tar.gz
+*.tar.bz2
+
+# SD card images
+*.img
+*.img.xz
+
+# Editor / OS noise
+*.swp
+*.swo
+*~
+.DS_Store
