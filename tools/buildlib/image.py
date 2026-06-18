@@ -63,6 +63,7 @@ def build_image(config: BuildConfig, *, force: bool = False) -> None:
         {
             "kind": "image",
             "board": config.board.name,
+            "kernel_version": config.kernel.version,
             "inputs": {
                 "bootfs": str(bootfs_archive.relative_to(config.root)),
                 "rootfs": str(rootfs_archive.relative_to(config.root)),

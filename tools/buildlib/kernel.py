@@ -60,6 +60,7 @@ def check_kernel(config: BuildConfig, *, source_override: str | None = None, for
             {
                 "kind": "kernel-patch-check",
                 "board": config.board.name,
+                "kernel_version": config.kernel.version,
                 "source": _source_manifest(config, source_dir),
                 "patches": patch_manifest(patches, config.root),
             },
@@ -94,6 +95,7 @@ def build_kernel(config: BuildConfig, *, jobs: int = 0, force: bool = False, pre
         {
             "kind": "kernel",
             "board": config.board.name,
+            "kernel_version": config.kernel.version,
             "source": _source_manifest(config, source_dir),
             "config": {
                 "defconfig": config.kernel.defconfig,
@@ -203,6 +205,7 @@ def _source_manifest(config: BuildConfig, source_dir: Path) -> dict[str, str]:
         verbose=config.verbose,
     )
     return {
+        "version": config.kernel.version,
         "repo": config.kernel.repo,
         "ref": config.kernel.ref,
         "commit": (result.stdout or "").strip(),

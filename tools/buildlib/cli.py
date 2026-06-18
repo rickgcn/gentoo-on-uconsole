@@ -129,6 +129,7 @@ def handle_graph(args: argparse.Namespace) -> int:
     config = load_config(args)
     board = config.board.name
     print(f"board: {board}")
+    print(f"kernel: {config.kernel.version} ({config.kernel.ref})")
     print("graph:")
     print("  kernel -> firmware")
     print("  kernel -> rootfs")
@@ -188,4 +189,3 @@ def main(argv: list[str] | None = None) -> int:
     except BuildError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-

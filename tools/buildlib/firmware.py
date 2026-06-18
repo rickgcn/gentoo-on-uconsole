@@ -31,6 +31,7 @@ def build_firmware(config: BuildConfig, *, force: bool = False) -> None:
         {
             "kind": "firmware",
             "board": config.board.name,
+            "kernel_version": config.kernel.version,
             "inputs": {
                 "kernel_boot": str(kernel_boot.relative_to(config.root)),
                 "files_dir": _optional_relative(config.firmware.files_dir, config.root),
@@ -45,4 +46,3 @@ def _optional_relative(path: Path, root: Path) -> str | None:
     if not path.exists():
         return None
     return str(path.relative_to(root))
-

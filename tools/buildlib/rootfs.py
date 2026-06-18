@@ -42,6 +42,7 @@ def build_rootfs(config: BuildConfig, *, force: bool = False) -> None:
         {
             "kind": "rootfs",
             "board": config.board.name,
+            "kernel_version": config.kernel.version,
             "inputs": {
                 "stage3": str(stage3),
                 "modules": str(modules_archive.relative_to(config.root)),

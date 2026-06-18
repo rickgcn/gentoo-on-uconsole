@@ -25,6 +25,7 @@ class PathsConfig:
 
 @dataclass(frozen=True)
 class KernelConfig:
+    version: str
     repo: str
     ref: str
     source_dir: Path
@@ -77,19 +78,19 @@ class BuildConfig:
 
     @property
     def kernel_artifact_dir(self) -> Path:
-        return self.paths.artifacts_dir / "kernel" / self.board.name
+        return self.paths.artifacts_dir / "kernel" / self.kernel.version / self.board.name
 
     @property
     def firmware_artifact_dir(self) -> Path:
-        return self.paths.artifacts_dir / "firmware" / self.board.name
+        return self.paths.artifacts_dir / "firmware" / self.kernel.version / self.board.name
 
     @property
     def rootfs_artifact_dir(self) -> Path:
-        return self.paths.artifacts_dir / "rootfs" / self.board.name
+        return self.paths.artifacts_dir / "rootfs" / self.kernel.version / self.board.name
 
     @property
     def image_artifact_dir(self) -> Path:
-        return self.paths.artifacts_dir / "images"
+        return self.paths.artifacts_dir / "images" / self.kernel.version / self.board.name
 
     @classmethod
     def load(cls, root: Path, config_path: Path, *, verbose: bool = False) -> "BuildConfig":
@@ -111,21 +112,33 @@ class BuildConfig:
                 family=data["board"]["family"],
                 arch=data["board"]["arch"],
             )
+            kernel_data = data["kernel"]
+            kernel_version = kernel_data.get("version") or _kernel_version_from_ref(kernel_data["ref"])
             kernel = KernelConfig(
-                repo=data["kernel"]["repo"],
-                ref=data["kernel"]["ref"],
-                source_dir=_path(root, data["kernel"]["source_dir"]),
-                work_dir=_path(root, data["kernel"]["work_dir"]),
-                check_dir=_path(root, data["kernel"]["check_dir"]),
-                patches_dir=_path(root, data["kernel"]["patches_dir"]),
-                defconfig=data["kernel"]["defconfig"],
-                arch=data["kernel"]["arch"],
-                cross_compile=data["kernel"].get("cross_compile", ""),
-                image_path=data["kernel"]["image_path"],
-                kernel_image_name=data["kernel"]["kernel_image_name"],
-                dtb_glob=data["kernel"]["dtb_glob"],
-                dtbo_glob=data["kernel"]["dtbo_glob"],
-                overlays_readme=data["kernel"]["overlays_readme"],
+                version=kernel_version,
+                repo=kernel_data["repo"],
+                ref=kernel_data["ref"],
+                source_dir=_path(
+                    root,
+                    kernel_data.get("source_dir", str(paths.sources_dir / "kernel" / kernel_version / "linux")),
+                ),
+                work_dir=_path(
+                    root,
+                    kernel_data.get("work_dir", str(paths.work_dir / "kernel" / kernel_version / "linux")),
+                ),
+                check_dir=_path(
+                    root,
+                    kernel_data.get("check_dir", str(paths.work_dir / "kernel" / kernel_version / "apply-check")),
+                ),
+                patches_dir=_path(root, kernel_data.get("patches_dir", f"kernel/{kernel_version}/patches")),
+                defconfig=kernel_data["defconfig"],
+                arch=kernel_data["arch"],
+                cross_compile=kernel_data.get("cross_compile", ""),
+                image_path=kernel_data["image_path"],
+                kernel_image_name=kernel_data["kernel_image_name"],
+                dtb_glob=kernel_data["dtb_glob"],
+                dtbo_glob=kernel_data["dtbo_glob"],
+                overlays_readme=kernel_data["overlays_readme"],
             )
             firmware = FirmwareConfig(
                 files_dir=_path(root, data["firmware"]["files_dir"]),
@@ -165,3 +178,8 @@ def _path(root: Path, value: str) -> Path:
         return path
     return root / path
 
+
+def _kernel_version_from_ref(ref: str) -> str:
+    if ref.startswith("rpi-"):
+        return ref.removeprefix("rpi-")
+    return ref
