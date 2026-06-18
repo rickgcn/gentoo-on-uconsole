@@ -1,0 +1,43 @@
+[board]
+name = "uconsole-cm4"
+family = "raspberrypi"
+arch = "arm64"
+
+[paths]
+build_dir = "build"
+sources_dir = "build/sources"
+work_dir = "build/work"
+artifacts_dir = "build/artifacts"
+logs_dir = "build/logs"
+
+[kernel]
+repo = "https://github.com/raspberrypi/linux.git"
+ref = "rpi-6.18.y"
+source_dir = "build/sources/kernel/linux"
+work_dir = "build/work/kernel/linux"
+check_dir = "build/work/kernel/apply-check"
+patches_dir = "kernel/patches"
+defconfig = "bcm2711_defconfig"
+arch = "arm64"
+cross_compile = "aarch64-linux-gnu-"
+image_path = "arch/arm64/boot/Image"
+kernel_image_name = "kernel8.img"
+dtb_glob = "arch/arm64/boot/dts/broadcom/*.dtb"
+dtbo_glob = "arch/arm64/boot/dts/overlays/*.dtbo"
+overlays_readme = "arch/arm64/boot/dts/overlays/README"
+
+[firmware]
+files_dir = "firmware/files"
+work_dir = "build/work/firmware/uconsole-cm4"
+
+[rootfs]
+stage3 = ""
+files_dir = "rootfs/files"
+work_dir = "build/work/rootfs/uconsole-cm4"
+
+[image]
+name = "gentoo-uconsole-cm4.img"
+size_mib = 8192
+boot_size_mib = 512
+work_dir = "build/work/image/uconsole-cm4"
+compress = true
