@@ -27,7 +27,7 @@ def load_config(args: argparse.Namespace) -> BuildConfig:
 def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
-        default="configs/uconsole-cm4.toml",
+        required=True,
         help="Path to the board build configuration.",
     )
     parser.add_argument(
