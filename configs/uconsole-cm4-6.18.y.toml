@@ -88,6 +88,9 @@ timezone = "UTC"
 locale = "en_US.UTF-8"
 keymap = "us"
 
+[rootfs.desktop]
+profile = "sway"
+
 [rootfs.user]
 groups = ["wheel", "audio", "video", "input", "users"]
 
@@ -98,7 +101,7 @@ root_label = "gentoo-root"
 
 [image]
 name = "gentoo-uconsole-cm4.img"
-size_mib = 8192
+size_mib = 16384
 boot_size_mib = 512
 work_dir = "build/work/image/uconsole-cm4"
 compress = true

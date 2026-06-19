@@ -1,0 +1,28 @@
+set $bg #101418
+set $fg #e6edf3
+set $accent #2dd4bf
+set $urgent #ff6b6b
+
+font pango:Noto Sans 10
+default_border none
+default_floating_border none
+
+seat * xcursor_theme Adwaita 24
+input * {
+    xkb_layout us
+    repeat_delay 300
+    repeat_rate 30
+}
+
+output * bg $bg solid_color
+
+client.focused          $accent $accent $bg $accent $accent
+client.focused_inactive $bg     $bg     $fg $bg     $bg
+client.unfocused        $bg     $bg     $fg $bg     $bg
+client.urgent           $urgent $urgent $bg $urgent $urgent
+
+bindsym XF86MonBrightnessUp exec xbacklight -inc 10
+bindsym XF86MonBrightnessDown exec xbacklight -dec 10
+bindsym Mod4+Shift+e exec swaynag -t warning -m 'Exit greeter?' -B 'Exit' 'swaymsg exit'
+
+exec "gtkgreet -l -s /etc/greetd/gtkgreet.css; swaymsg exit"

@@ -1,0 +1,45 @@
+window {
+  background: #101418;
+  color: #e6edf3;
+  font-family: "Noto Sans";
+  font-size: 11pt;
+}
+
+box#body {
+  background-color: rgba(27, 32, 38, 0.92);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  margin: 32px;
+  padding: 34px;
+}
+
+label {
+  color: #e6edf3;
+}
+
+entry,
+button,
+combobox button {
+  background: #101418;
+  border: 1px solid rgba(125, 133, 144, 0.32);
+  border-radius: 6px;
+  color: #e6edf3;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+entry:focus,
+button:focus,
+combobox button:focus {
+  border-color: #2dd4bf;
+}
+
+button:hover {
+  background: #1f2933;
+}
+
+button:active {
+  background: #2dd4bf;
+  color: #101418;
+}
