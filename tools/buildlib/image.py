@@ -4,9 +4,14 @@ from pathlib import Path
 
 from .command import run
 from .config import BuildConfig
+from .disk import DiskIdentity, load_or_create_disk_identity
 from .errors import BuildError
 from .files import require_empty_or_force, require_root, safe_rmtree
 from .manifest import file_manifest, write_manifest
+
+
+GPT_EFI_SYSTEM_TYPE = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
+GPT_LINUX_FILESYSTEM_TYPE = "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 
 
 def build_image(config: BuildConfig, *, force: bool = False) -> None:
@@ -18,6 +23,7 @@ def build_image(config: BuildConfig, *, force: bool = False) -> None:
         raise BuildError(f"rootfs artifact is missing, run rootfs build first: {rootfs_archive}")
 
     require_root("image build")
+    identity = load_or_create_disk_identity(config)
 
     artifact_dir = config.image_artifact_dir
     work_dir = config.image.work_dir
@@ -34,17 +40,45 @@ def build_image(config: BuildConfig, *, force: bool = False) -> None:
 
     loop_device = ""
     try:
-        _create_partitioned_image(config, image_path)
+        _create_partitioned_image(config, identity, image_path)
         loop_device = _attach_loop(config, image_path)
         boot_part = _loop_partition(loop_device, 1)
         root_part = _loop_partition(loop_device, 2)
 
-        run(["mkfs.vfat", "-F", "32", boot_part], verbose=config.verbose)
-        run(["mkfs.ext4", "-F", root_part], verbose=config.verbose)
+        run(
+            [
+                "mkfs.vfat",
+                "-F",
+                "32",
+                "-i",
+                identity.boot_filesystem_id,
+                "-n",
+                identity.boot_label,
+                boot_part,
+            ],
+            verbose=config.verbose,
+        )
+        run(
+            [
+                "mkfs.ext4",
+                "-F",
+                "-U",
+                identity.root_filesystem_uuid,
+                "-L",
+                identity.root_label,
+                root_part,
+            ],
+            verbose=config.verbose,
+        )
         run(["mount", root_part, str(root_mount)], verbose=config.verbose)
         run(["mount", boot_part, str(boot_mount)], verbose=config.verbose)
-        run(["tar", "--zstd", "-xpf", str(rootfs_archive), "-C", str(root_mount)], verbose=config.verbose)
-        run(["tar", "--zstd", "-xpf", str(bootfs_archive), "-C", str(boot_mount)], verbose=config.verbose)
+        run(["tar", "--zstd", "--delay-directory-restore", "-xpf", str(rootfs_archive), "-C", str(root_mount)], verbose=config.verbose)
+        run(["chown", "root:root", str(root_mount)], verbose=config.verbose)
+        run(["chmod", "0755", str(root_mount)], verbose=config.verbose)
+        run(
+            ["tar", "--zstd", "--no-same-owner", "--no-same-permissions", "-xf", str(bootfs_archive), "-C", str(boot_mount)],
+            verbose=config.verbose,
+        )
         run(["sync"], verbose=config.verbose)
     finally:
         _best_effort_unmount(config, boot_mount)
@@ -67,10 +101,21 @@ def build_image(config: BuildConfig, *, force: bool = False) -> None:
             "inputs": {
                 "bootfs": str(bootfs_archive.relative_to(config.root)),
                 "rootfs": str(rootfs_archive.relative_to(config.root)),
+                "disk_identity": str(config.disk_identity_path.relative_to(config.root)),
             },
             "image": {
                 "size_mib": config.image.size_mib,
                 "boot_size_mib": config.image.boot_size_mib,
+            },
+            "disk": {
+                "partition_table": identity.partition_table,
+                "disk_guid": identity.disk_guid,
+                "boot_partition_guid": identity.boot_partition_guid,
+                "root_partition_guid": identity.root_partition_guid,
+                "boot_filesystem_id": identity.boot_filesystem_id,
+                "root_filesystem_uuid": identity.root_filesystem_uuid,
+                "boot_label": identity.boot_label,
+                "root_label": identity.root_label,
             },
             "outputs": file_manifest(artifact_dir, config.root),
         },
@@ -80,14 +125,19 @@ def build_image(config: BuildConfig, *, force: bool = False) -> None:
         print(f"compressed image: {compressed_path}")
 
 
-def _create_partitioned_image(config: BuildConfig, image_path: Path) -> None:
+def _create_partitioned_image(config: BuildConfig, identity: DiskIdentity, image_path: Path) -> None:
     run(["truncate", "-s", f"{config.image.size_mib}M", str(image_path)], verbose=config.verbose)
     layout = (
-        "label: dos\n"
-        "unit: MiB\n"
+        "label: gpt\n"
+        f"label-id: {identity.disk_guid}\n"
         "\n"
-        f", {config.image.boot_size_mib}, c, *\n"
-        ", , L\n"
+        f"size={config.image.boot_size_mib}M, "
+        f"type={GPT_EFI_SYSTEM_TYPE}, "
+        f"uuid={identity.boot_partition_guid}, "
+        'name="boot"\n'
+        f"type={GPT_LINUX_FILESYSTEM_TYPE}, "
+        f"uuid={identity.root_partition_guid}, "
+        'name="root"\n'
     )
     run(["sfdisk", str(image_path)], input_text=layout, verbose=config.verbose)
 
