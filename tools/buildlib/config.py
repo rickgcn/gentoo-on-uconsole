@@ -57,6 +57,13 @@ class RootfsConfig:
 
 
 @dataclass(frozen=True)
+class DiskConfig:
+    partition_table: str
+    boot_label: str
+    root_label: str
+
+
+@dataclass(frozen=True)
 class ImageConfig:
     name: str
     size_mib: int
@@ -74,6 +81,7 @@ class BuildConfig:
     kernel: KernelConfig
     firmware: FirmwareConfig
     rootfs: RootfsConfig
+    disk: DiskConfig
     image: ImageConfig
     verbose: bool = False
 
@@ -92,6 +100,10 @@ class BuildConfig:
     @property
     def image_artifact_dir(self) -> Path:
         return self.paths.artifacts_dir / "images" / self.kernel.version / self.board.name
+
+    @property
+    def disk_identity_path(self) -> Path:
+        return self.paths.work_dir / "disk" / self.kernel.version / self.board.name / "identity.toml"
 
     @classmethod
     def load(
@@ -162,6 +174,12 @@ class BuildConfig:
                 files_dir=_path(root, data["rootfs"]["files_dir"]),
                 work_dir=_path(root, data["rootfs"]["work_dir"]),
             )
+            disk_data = data["disk"]
+            disk = DiskConfig(
+                partition_table=_partition_table(disk_data["partition_table"]),
+                boot_label=_label(disk_data["boot_label"], "disk.boot_label", max_length=11),
+                root_label=_label(disk_data["root_label"], "disk.root_label", max_length=16),
+            )
             image = ImageConfig(
                 name=data["image"]["name"],
                 size_mib=int(data["image"]["size_mib"]),
@@ -180,6 +198,7 @@ class BuildConfig:
             kernel=kernel,
             firmware=firmware,
             rootfs=rootfs,
+            disk=disk,
             image=image,
             verbose=verbose,
         )
@@ -206,3 +225,18 @@ def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _partition_table(value: str) -> str:
+    normalized = value.lower()
+    if normalized != "gpt":
+        raise BuildError(f"unsupported disk.partition_table: {value}")
+    return normalized
+
+
+def _label(value: str, key: str, *, max_length: int) -> str:
+    if not value:
+        raise BuildError(f"{key} must not be empty")
+    if len(value) > max_length:
+        raise BuildError(f"{key} must be {max_length} characters or fewer: {value}")
+    return value

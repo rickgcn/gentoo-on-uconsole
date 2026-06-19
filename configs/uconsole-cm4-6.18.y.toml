@@ -36,6 +36,11 @@ stage3 = ""
 files_dir = "rootfs/files"
 work_dir = "build/work/rootfs/uconsole-cm4"
 
+[disk]
+partition_table = "gpt"
+boot_label = "UCONSOLE"
+root_label = "gentoo-root"
+
 [image]
 name = "gentoo-uconsole-cm4.img"
 size_mib = 8192
