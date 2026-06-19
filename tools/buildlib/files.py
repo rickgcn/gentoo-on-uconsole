@@ -57,14 +57,19 @@ def archive_zst(src: Path, dst: Path, *, verbose: bool = False) -> None:
     ensure_parent(dst)
     if not src.exists():
         raise BuildError(f"cannot archive missing directory: {src}")
-    run(["tar", "--zstd", "-cf", str(dst), "-C", str(src), "."], verbose=verbose)
+    members = sorted(item.name for item in src.iterdir())
+    if not members:
+        raise BuildError(f"cannot archive empty directory: {src}")
+    run(["tar", "--zstd", "-cf", str(dst), "-C", str(src), "--", *members], verbose=verbose)
 
 
-def extract_archive(src: Path, dst: Path, *, verbose: bool = False) -> None:
+def extract_archive(src: Path, dst: Path, *, keep_directory_symlink: bool = False, verbose: bool = False) -> None:
     if not src.exists():
         raise BuildError(f"archive does not exist: {src}")
     dst.mkdir(parents=True, exist_ok=True)
     args = ["tar"]
+    if keep_directory_symlink:
+        args.append("--keep-directory-symlink")
     suffixes = "".join(src.suffixes)
     if suffixes.endswith(".tar.zst"):
         args.append("--zstd")
@@ -81,4 +86,3 @@ def extract_archive(src: Path, dst: Path, *, verbose: bool = False) -> None:
 def require_root(step: str) -> None:
     if os.geteuid() != 0:
         raise BuildError(f"{step} requires root privileges")
-

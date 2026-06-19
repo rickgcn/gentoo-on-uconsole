@@ -57,8 +57,28 @@ class FirmwareConfig:
 @dataclass(frozen=True)
 class RootfsConfig:
     stage3: str
-    files_dir: Path
+    stage3_url: str
+    stage3_sha512: str
+    stage3_size: int
+    repository_url: str
+    repository_ref: str
+    repository_dir: Path
+    distfiles_mirrors: tuple[str, ...]
+    overlay_dir: Path
     work_dir: Path
+    hostname: str
+    timezone: str
+    locale: str
+    keymap: str
+    user: RootfsUserConfig
+
+
+@dataclass(frozen=True)
+class RootfsUserConfig:
+    name: str
+    password_hash: str
+    groups: tuple[str, ...]
+    ssh_authorized_keys: Path | None
 
 
 @dataclass(frozen=True)
@@ -179,10 +199,29 @@ class BuildConfig:
                 config_txt=tuple(data["firmware"]["config_txt"]),
                 cmdline=tuple(data["firmware"]["cmdline"]),
             )
+            rootfs_data = data["rootfs"]
+            rootfs_user_data = rootfs_data.get("user", {})
             rootfs = RootfsConfig(
-                stage3=data["rootfs"].get("stage3", ""),
-                files_dir=_path(root, data["rootfs"]["files_dir"]),
-                work_dir=_path(root, data["rootfs"]["work_dir"]),
+                stage3=rootfs_data.get("stage3", ""),
+                stage3_url=rootfs_data.get("stage3_url", ""),
+                stage3_sha512=rootfs_data.get("stage3_sha512", ""),
+                stage3_size=int(rootfs_data.get("stage3_size", 0)),
+                repository_url=rootfs_data.get("repository_url", ""),
+                repository_ref=rootfs_data.get("repository_ref", ""),
+                repository_dir=_path(root, rootfs_data["repository_dir"]),
+                distfiles_mirrors=tuple(rootfs_data.get("distfiles_mirrors", [])),
+                overlay_dir=_path(root, rootfs_data["overlay_dir"]),
+                work_dir=_path(root, rootfs_data["work_dir"]),
+                hostname=rootfs_data["hostname"],
+                timezone=rootfs_data["timezone"],
+                locale=rootfs_data["locale"],
+                keymap=rootfs_data["keymap"],
+                user=RootfsUserConfig(
+                    name=rootfs_user_data.get("name", ""),
+                    password_hash=rootfs_user_data.get("password_hash", ""),
+                    groups=tuple(rootfs_user_data.get("groups", [])),
+                    ssh_authorized_keys=_optional_path(root, rootfs_user_data.get("ssh_authorized_keys")),
+                ),
             )
             disk_data = data["disk"]
             disk = DiskConfig(
@@ -215,10 +254,16 @@ class BuildConfig:
 
 
 def _path(root: Path, value: str) -> Path:
-    path = Path(value)
+    path = Path(value).expanduser()
     if path.is_absolute():
         return path
     return root / path
+
+
+def _optional_path(root: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    return _path(root, value)
 
 
 def _kernel_version_from_ref(ref: str) -> str:

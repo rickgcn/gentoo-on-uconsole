@@ -70,9 +70,22 @@ cmdline = [
 ]
 
 [rootfs]
-stage3 = ""
-files_dir = "rootfs/files"
+stage3 = "build/sources/rootfs/stage3-arm64-openrc-20260614T234629Z.tar.xz"
+stage3_url = "https://distfiles.gentoo.org/releases/arm64/autobuilds/20260614T234629Z/stage3-arm64-openrc-20260614T234629Z.tar.xz"
+stage3_sha512 = "bd16e88528eb0b8a5e4dcd79844c93717aeff2983d748972ebfae680947fbba29c532468b69dbe6c2363406b1bcdbeab86c76eaf45d80e4399de2ea7e4e5244b"
+stage3_size = 414053796
+repository_url = "https://github.com/gentoo/gentoo.git"
+repository_ref = "master"
+repository_dir = "build/sources/rootfs/gentoo"
+overlay_dir = "rootfs/overlay"
 work_dir = "build/work/rootfs/uconsole-cm4"
+hostname = "uconsole"
+timezone = "UTC"
+locale = "en_US.UTF-8"
+keymap = "us"
+
+[rootfs.user]
+groups = ["wheel", "audio", "video", "input", "users"]
 
 [disk]
 partition_table = "gpt"

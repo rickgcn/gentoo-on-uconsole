@@ -9,7 +9,7 @@ from .errors import BuildError
 from .firmware import build_firmware, prepare_firmware
 from .image import build_image
 from .kernel import build_kernel, check_kernel, prepare_kernel
-from .rootfs import build_rootfs
+from .rootfs import build_rootfs, prepare_rootfs
 
 
 def repo_root() -> Path:
@@ -111,8 +111,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     rootfs = subparsers.add_parser("rootfs", help="Root filesystem commands.")
     rootfs_sub = rootfs.add_subparsers(dest="rootfs_command", required=True)
+    rootfs_prepare = rootfs_sub.add_parser("prepare", help="Download and verify the Gentoo stage3 archive.")
+    rootfs_prepare.add_argument("--force", action="store_true", help="Replace an existing stage3 archive.")
+    rootfs_prepare.set_defaults(handler=handle_rootfs_prepare)
+
     rootfs_build = rootfs_sub.add_parser("build", help="Assemble the Gentoo root filesystem artifact.")
     rootfs_build.add_argument("--force", action="store_true", help="Replace existing rootfs artifacts.")
+    rootfs_build.add_argument(
+        "--no-prepare",
+        action="store_true",
+        help="Do not download the Gentoo stage3 archive automatically.",
+    )
     rootfs_build.set_defaults(handler=handle_rootfs_build)
 
     image = subparsers.add_parser("image", help="Image commands.")
@@ -186,8 +195,13 @@ def handle_firmware_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_rootfs_prepare(args: argparse.Namespace) -> int:
+    prepare_rootfs(load_config(args), force=args.force)
+    return 0
+
+
 def handle_rootfs_build(args: argparse.Namespace) -> int:
-    build_rootfs(load_config(args), force=args.force)
+    build_rootfs(load_config(args), force=args.force, prepare=not args.no_prepare)
     return 0
 
 
@@ -213,3 +227,6 @@ def main(argv: list[str] | None = None) -> int:
     except BuildError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        return 130
