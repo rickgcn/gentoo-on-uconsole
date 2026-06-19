@@ -45,8 +45,13 @@ class KernelConfig:
 
 @dataclass(frozen=True)
 class FirmwareConfig:
-    files_dir: Path
+    repo: str
+    ref: str
+    source_dir: Path
     work_dir: Path
+    boot_files: tuple[str, ...]
+    config_txt: tuple[str, ...]
+    cmdline: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -166,8 +171,13 @@ class BuildConfig:
                 overlays_readme=kernel_data["overlays_readme"],
             )
             firmware = FirmwareConfig(
-                files_dir=_path(root, data["firmware"]["files_dir"]),
+                repo=data["firmware"]["repo"],
+                ref=data["firmware"]["ref"],
+                source_dir=_path(root, data["firmware"]["source_dir"]),
                 work_dir=_path(root, data["firmware"]["work_dir"]),
+                boot_files=tuple(data["firmware"]["boot_files"]),
+                config_txt=tuple(data["firmware"]["config_txt"]),
+                cmdline=tuple(data["firmware"]["cmdline"]),
             )
             rootfs = RootfsConfig(
                 stage3=data["rootfs"].get("stage3", ""),

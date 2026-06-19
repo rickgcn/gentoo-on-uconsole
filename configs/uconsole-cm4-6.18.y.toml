@@ -28,8 +28,46 @@ dtbo_glob = "arch/arm64/boot/dts/overlays/*.dtbo"
 overlays_readme = "arch/arm64/boot/dts/overlays/README"
 
 [firmware]
-files_dir = "firmware/files"
+repo = "https://github.com/raspberrypi/firmware.git"
+ref = "dd28ccd67f16e60f5739dc779060be218b28eb1e"
+source_dir = "build/sources/firmware/raspberrypi"
 work_dir = "build/work/firmware/uconsole-cm4"
+boot_files = [
+  "boot/LICENCE.broadcom",
+  "boot/bootcode.bin",
+  "boot/fixup4.dat",
+  "boot/fixup4cd.dat",
+  "boot/fixup4db.dat",
+  "boot/fixup4x.dat",
+  "boot/start4.elf",
+  "boot/start4cd.elf",
+  "boot/start4db.elf",
+  "boot/start4x.elf",
+]
+config_txt = [
+  "arm_64bit=1",
+  "kernel=kernel8.img",
+  "disable_overscan=1",
+  "dtparam=audio=on",
+  "[pi4]",
+  "max_framebuffers=2",
+  "[all]",
+  "ignore_lcd=1",
+  "dtoverlay=dwc2,dr_mode=host",
+  "dtoverlay=vc4-kms-v3d-pi4,cma-384",
+  "dtoverlay=clockworkpi-uconsole",
+  "dtoverlay=audremap,pins_12_13",
+  "dtparam=spi=on",
+  "gpio=10=ip,np",
+  "dtparam=ant2",
+]
+cmdline = [
+  "rootfstype=ext4",
+  "rootwait",
+  "fsck.repair=yes",
+  "console=serial0,115200",
+  "console=tty1",
+]
 
 [rootfs]
 stage3 = ""

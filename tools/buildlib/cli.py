@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .config import BuildConfig
 from .errors import BuildError
-from .firmware import build_firmware
+from .firmware import build_firmware, prepare_firmware
 from .image import build_image
 from .kernel import build_kernel, check_kernel, prepare_kernel
 from .rootfs import build_rootfs
@@ -97,8 +97,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     firmware = subparsers.add_parser("firmware", help="Firmware commands.")
     firmware_sub = firmware.add_subparsers(dest="firmware_command", required=True)
+    firmware_prepare = firmware_sub.add_parser("prepare", help="Clone or update the Raspberry Pi boot firmware.")
+    firmware_prepare.set_defaults(handler=handle_firmware_prepare)
+
     firmware_build = firmware_sub.add_parser("build", help="Assemble boot firmware artifacts.")
     firmware_build.add_argument("--force", action="store_true", help="Replace existing firmware artifacts.")
+    firmware_build.add_argument(
+        "--no-prepare",
+        action="store_true",
+        help="Do not clone the Raspberry Pi boot firmware automatically.",
+    )
     firmware_build.set_defaults(handler=handle_firmware_build)
 
     rootfs = subparsers.add_parser("rootfs", help="Root filesystem commands.")
@@ -168,8 +176,13 @@ def handle_kernel_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_firmware_prepare(args: argparse.Namespace) -> int:
+    prepare_firmware(load_config(args))
+    return 0
+
+
 def handle_firmware_build(args: argparse.Namespace) -> int:
-    build_firmware(load_config(args), force=args.force)
+    build_firmware(load_config(args), force=args.force, prepare=not args.no_prepare)
     return 0
 
 
