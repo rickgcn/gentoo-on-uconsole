@@ -21,7 +21,13 @@ def load_config(args: argparse.Namespace) -> BuildConfig:
     config_path = Path(args.config)
     if not config_path.is_absolute():
         config_path = root / config_path
-    return BuildConfig.load(root, config_path, verbose=args.verbose)
+    local_config_paths = []
+    for local_config in args.local_config or []:
+        local_config_path = Path(local_config)
+        if not local_config_path.is_absolute():
+            local_config_path = root / local_config_path
+        local_config_paths.append(local_config_path)
+    return BuildConfig.load(root, config_path, local_config_paths=local_config_paths, verbose=args.verbose)
 
 
 def add_common_flags(parser: argparse.ArgumentParser) -> None:
@@ -34,6 +40,11 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
         "--verbose",
         action="store_true",
         help="Print external commands before running them.",
+    )
+    parser.add_argument(
+        "--local-config",
+        action="append",
+        help="Path to a local configuration overlay. Can be passed more than once.",
     )
 
 

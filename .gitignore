@@ -10,6 +10,11 @@ __pycache__/
 *.tar.gz
 *.tar.bz2
 
+# Local build configuration
+configs/*.local.toml
+configs/local*.toml
+configs/*secret*.toml
+
 # SD card images
 *.img
 *.img.xz

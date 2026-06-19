@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import tomllib
+from typing import Any
 
 from .errors import BuildError
 
@@ -93,11 +94,23 @@ class BuildConfig:
         return self.paths.artifacts_dir / "images" / self.kernel.version / self.board.name
 
     @classmethod
-    def load(cls, root: Path, config_path: Path, *, verbose: bool = False) -> "BuildConfig":
+    def load(
+        cls,
+        root: Path,
+        config_path: Path,
+        *,
+        local_config_paths: list[Path] | None = None,
+        verbose: bool = False,
+    ) -> "BuildConfig":
         if not config_path.exists():
             raise BuildError(f"configuration file does not exist: {config_path}")
         with config_path.open("rb") as handle:
             data = tomllib.load(handle)
+        for local_config_path in local_config_paths or []:
+            if not local_config_path.exists():
+                raise BuildError(f"local configuration file does not exist: {local_config_path}")
+            with local_config_path.open("rb") as handle:
+                data = _merge_dict(data, tomllib.load(handle))
 
         try:
             paths = PathsConfig(
@@ -183,3 +196,13 @@ def _kernel_version_from_ref(ref: str) -> str:
     if ref.startswith("rpi-"):
         return ref.removeprefix("rpi-")
     return ref
+
+
+def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
