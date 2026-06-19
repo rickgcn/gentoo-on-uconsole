@@ -49,6 +49,7 @@ bindsym $mod+Shift+q kill
 bindsym $mod+Shift+c reload
 bindsym $mod+Shift+e exec swaynag -t warning -m 'Exit sway?' -B 'Exit' 'swaymsg exit'
 bindsym $mod+Ctrl+l exec swaylock -f -c 101418
+bindsym XF86PowerOff exec power-menu
 
 bindsym $mod+h focus left
 bindsym $mod+j focus down

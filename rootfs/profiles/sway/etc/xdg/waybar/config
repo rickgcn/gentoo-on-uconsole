@@ -40,6 +40,6 @@
   },
   "custom/power": {
     "format": "power",
-    "on-click": "swaynag -t warning -m 'Power menu' -B 'Lock' 'swaylock -f -c 101418' -B 'Exit' 'swaymsg exit' -B 'Reboot' 'loginctl reboot' -B 'Poweroff' 'loginctl poweroff'"
+    "on-click": "power-menu"
   }
 }

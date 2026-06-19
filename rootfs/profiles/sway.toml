@@ -92,6 +92,10 @@ groups = [
   "video",
 ]
 
+make_conf = [
+  { key = "VIDEO_CARDS", value = "vc4 v3d" },
+]
+
 package_use = [
   "dev-libs/bemenu -ncurses -X",
   "dev-libs/libdbusmenu gtk3",
@@ -138,6 +142,7 @@ services = [
 
 files = [
   { source = "sway/etc/conf.d/display-manager", target = "/etc/conf.d/display-manager", mode = "0644" },
+  { source = "sway/etc/elogind/logind.conf.d/10-power-key.conf", target = "/etc/elogind/logind.conf.d/10-power-key.conf", mode = "0644" },
   { source = "sway/etc/greetd/config.toml", target = "/etc/greetd/config.toml", mode = "0644" },
   { source = "sway/etc/greetd/environments", target = "/etc/greetd/environments", mode = "0644" },
   { source = "sway/etc/greetd/gtkgreet.css", target = "/etc/greetd/gtkgreet.css", mode = "0644" },
@@ -150,4 +155,5 @@ files = [
   { source = "sway/etc/xdg/waybar/config", target = "/etc/xdg/waybar/config", mode = "0644" },
   { source = "sway/etc/xdg/waybar/style.css", target = "/etc/xdg/waybar/style.css", mode = "0644" },
   { source = "sway/etc/xdg/xdg-desktop-portal/sway-portals.conf", target = "/etc/xdg/xdg-desktop-portal/sway-portals.conf", mode = "0644" },
+  { source = "sway/usr/local/bin/power-menu", target = "/usr/local/bin/power-menu", mode = "0755" },
 ]
