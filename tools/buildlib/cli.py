@@ -165,6 +165,10 @@ def handle_graph(args: argparse.Namespace) -> int:
     board = config.board.name
     print(f"board: {board}")
     print(f"kernel: {config.kernel.version} ({config.kernel.ref})")
+    print(f"rootfs desktop profile: {config.rootfs.desktop.profile}")
+    print(f"rootfs jobs: {config.rootfs.jobs}")
+    print(f"rootfs emerge jobs: {config.rootfs.emerge_jobs}")
+    print(f"rootfs emerge load average: {config.rootfs.emerge_load_average}")
     print("graph:")
     print("  kernel -> firmware")
     print("  kernel -> rootfs")
@@ -174,6 +178,8 @@ def handle_graph(args: argparse.Namespace) -> int:
     print(f"  firmware: {config.firmware_artifact_dir}")
     print(f"  rootfs:   {config.rootfs_artifact_dir}")
     print(f"  image:    {config.image_artifact_dir}")
+    print(f"cache:")
+    print(f"  rootfs:   {config.paths.cache_dir / 'rootfs'}")
     return 0
 
 

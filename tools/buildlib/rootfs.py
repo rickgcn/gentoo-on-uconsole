@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import os
 import platform
@@ -8,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tomllib
 import urllib.request
 from pathlib import Path
 from urllib.error import URLError
@@ -30,7 +32,84 @@ from .manifest import file_manifest, write_manifest
 
 QEMU_AARCH64_STATIC = Path("/usr/bin/qemu-aarch64-static")
 USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*[$]?$")
-CHROOT_MOUNT_NAMES = ("proc", "sys", "dev", "run")
+CHROOT_MOUNT_NAMES = ("proc", "sys", "dev", "run", "var/cache/distfiles", "var/cache/binpkgs")
+ROOTFS_PROFILE_DIR = Path("rootfs/profiles")
+BASE_PROFILE = "base"
+SERVICE_RUNLEVELS = ("boot", "default", "nonetwork", "shutdown", "sysinit")
+EMERGE_ROOTFS_INSTALL_OPTIONS = (
+    "--usepkg=y",
+    "--getbinpkg=y",
+    "--buildpkg=y",
+    "--binpkg-respect-use=y",
+    "--with-bdeps=n",
+    "--noreplace",
+)
+EMERGE_ROOTFS_BOOTSTRAP_OPTIONS = (
+    "--usepkg=y",
+    "--getbinpkg=y",
+    "--buildpkg=y",
+    "--binpkg-respect-use=y",
+    "--with-bdeps=n",
+    "--oneshot",
+)
+EMERGE_ROOTFS_REBUILD_OPTIONS = (
+    "--usepkg=y",
+    "--getbinpkg=y",
+    "--buildpkg=y",
+    "--binpkg-respect-use=y",
+    "--with-bdeps=n",
+    "--oneshot",
+    "--newuse",
+)
+
+
+@dataclass(frozen=True)
+class RootfsService:
+    name: str
+    runlevel: str
+
+
+@dataclass(frozen=True)
+class RootfsProfileFile:
+    source: Path
+    target: Path
+    mode: int | None
+
+
+@dataclass(frozen=True)
+class RootfsBootstrap:
+    packages: tuple[str, ...]
+    use: tuple[str, ...]
+    rebuild: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RootfsMakeConf:
+    key: str
+    value: str
+
+
+@dataclass(frozen=True)
+class RootfsProfile:
+    name: str
+    paths: tuple[Path, ...]
+    portage_profile: str
+    packages: tuple[str, ...]
+    rebuild: tuple[str, ...]
+    groups: tuple[str, ...]
+    bootstrap: tuple[RootfsBootstrap, ...]
+    make_conf: tuple[RootfsMakeConf, ...]
+    package_use: tuple[str, ...]
+    accept_keywords: tuple[str, ...]
+    package_license: tuple[str, ...]
+    services: tuple[RootfsService, ...]
+    files: tuple[RootfsProfileFile, ...]
+
+
+@dataclass(frozen=True)
+class RootfsCache:
+    distfiles_dir: Path
+    binpkgs_dir: Path
 
 
 def prepare_rootfs(config: BuildConfig, *, force: bool = False) -> None:
@@ -85,7 +164,8 @@ def _prepare_gentoo_repository(config: BuildConfig, *, force: bool = False) -> N
 
 
 def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = True) -> None:
-    _validate_rootfs_build_config(config)
+    profile = _load_rootfs_profile(config)
+    _validate_rootfs_build_config(config, profile)
     if prepare:
         prepare_rootfs(config)
 
@@ -104,7 +184,9 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
     identity = load_or_create_disk_identity(config)
     artifact_dir = config.rootfs_artifact_dir
     work_dir = config.rootfs.work_dir
+    cache = _prepare_rootfs_cache(config)
     _cleanup_chroot_mounts(config, work_dir)
+    _seed_rootfs_cache_from_workdir(work_dir, cache)
     require_empty_or_force(work_dir, force=force, allowed_root=config.paths.build_dir)
     require_empty_or_force(artifact_dir, force=force, allowed_root=config.paths.artifacts_dir)
 
@@ -112,10 +194,11 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
     extract_archive(stage3, work_dir, verbose=config.verbose)
     extract_archive(modules_archive, work_dir, keep_directory_symlink=True, verbose=config.verbose)
     _install_gentoo_repository(config, work_dir)
+    _configure_portage_profile(profile, work_dir)
     _require_rootfs_profile(work_dir)
-    _write_generated_files(config, identity, work_dir)
+    _write_generated_files(config, identity, profile, work_dir)
     copy_tree_contents(config.rootfs.overlay_dir, work_dir)
-    _configure_chroot(config, work_dir)
+    _configure_chroot(config, profile, work_dir)
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
     archive = artifact_dir / "rootfs.tar.zst"
@@ -137,15 +220,37 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
                 "modules": str(modules_archive.relative_to(config.root)),
                 "overlay_dir": _optional_relative(config.rootfs.overlay_dir, config.root),
                 "disk_identity": str(config.disk_identity_path.relative_to(config.root)),
+                "profiles": [str(path.relative_to(config.root)) for path in profile.paths],
+                "portage_profile": profile.portage_profile,
+                "cache": {
+                    "distfiles": _relative_or_absolute(cache.distfiles_dir, config.root),
+                    "binpkgs": _relative_or_absolute(cache.binpkgs_dir, config.root),
+                },
             },
             "rootfs": {
                 "hostname": config.rootfs.hostname,
                 "timezone": config.rootfs.timezone,
                 "locale": config.rootfs.locale,
                 "keymap": config.rootfs.keymap,
+                "profile": profile.name,
+                "jobs": config.rootfs.jobs,
+                "emerge_jobs": config.rootfs.emerge_jobs,
+                "emerge_load_average": config.rootfs.emerge_load_average,
                 "user": config.rootfs.user.name,
-                "groups": list(config.rootfs.user.groups),
+                "groups": list(_user_groups(config, profile)),
                 "ssh_authorized_keys": config.rootfs.user.ssh_authorized_keys is not None,
+                "bootstrap": [
+                    {
+                        "packages": list(item.packages),
+                        "use": list(item.use),
+                        "rebuild": list(item.rebuild),
+                    }
+                    for item in profile.bootstrap
+                ],
+                "make_conf": {item.key: item.value for item in profile.make_conf},
+                "package_use": list(profile.package_use),
+                "packages": list(profile.packages),
+                "rebuild": list(profile.rebuild),
             },
             "disk": {
                 "partition_table": identity.partition_table,
@@ -257,6 +362,22 @@ def _install_gentoo_repository(config: BuildConfig, root: Path) -> None:
     shutil.copytree(source, target, symlinks=True, ignore=shutil.ignore_patterns(".git"))
 
 
+def _configure_portage_profile(profile: RootfsProfile, root: Path) -> None:
+    if not profile.portage_profile:
+        return
+    profile_target = root / "var/db/repos/gentoo/profiles" / profile.portage_profile
+    if not profile_target.exists():
+        raise BuildError(f"Portage profile does not exist: {profile.portage_profile}")
+
+    make_profile = root / "etc/portage/make.profile"
+    ensure_parent(make_profile)
+    if make_profile.exists() and make_profile.is_dir() and not make_profile.is_symlink():
+        raise BuildError(f"refusing to replace directory with Portage profile symlink: {make_profile}")
+    if make_profile.exists() or make_profile.is_symlink():
+        make_profile.unlink()
+    make_profile.symlink_to(os.path.relpath(profile_target, make_profile.parent))
+
+
 def _require_rootfs_profile(root: Path) -> None:
     profile = root / "etc/portage/make.profile"
     if not profile.is_symlink():
@@ -264,6 +385,224 @@ def _require_rootfs_profile(root: Path) -> None:
     target = profile.resolve(strict=False)
     if not target.exists():
         raise BuildError(f"rootfs Portage profile target does not exist: {profile} -> {target}")
+
+
+def _load_rootfs_profile(config: BuildConfig) -> RootfsProfile:
+    names = [BASE_PROFILE]
+    if config.rootfs.desktop.profile != "none":
+        names.append(config.rootfs.desktop.profile)
+    profiles = [_load_rootfs_profile_file(config, name) for name in names]
+    return _merge_rootfs_profiles(profiles)
+
+
+def _load_rootfs_profile_file(config: BuildConfig, name: str) -> RootfsProfile:
+    path = config.root / ROOTFS_PROFILE_DIR / f"{name}.toml"
+    if not path.exists():
+        raise BuildError(f"rootfs profile does not exist: {path}")
+    with path.open("rb") as handle:
+        data = tomllib.load(handle)
+
+    profile_data = data.get("profile", {})
+    if not isinstance(profile_data, dict):
+        raise BuildError(f"rootfs profile [profile] must be a table: {path}")
+    profile_name = _profile_name(profile_data.get("name", name))
+    if profile_name != name:
+        raise BuildError(f"rootfs profile name mismatch: expected {name}, got {profile_name}")
+
+    return RootfsProfile(
+        name=profile_name,
+        paths=(path,),
+        portage_profile=_profile_portage_profile(profile_data),
+        packages=_string_tuple(profile_data, "packages"),
+        rebuild=_string_tuple(profile_data, "rebuild"),
+        groups=_string_tuple(profile_data, "groups"),
+        bootstrap=_profile_bootstrap(profile_data),
+        make_conf=_profile_make_conf(profile_data),
+        package_use=_string_tuple(profile_data, "package_use"),
+        accept_keywords=_string_tuple(profile_data, "accept_keywords"),
+        package_license=_string_tuple(profile_data, "package_license"),
+        services=_profile_services(profile_data),
+        files=_profile_files(path, profile_data),
+    )
+
+
+def _merge_rootfs_profiles(profiles: list[RootfsProfile]) -> RootfsProfile:
+    services: dict[str, RootfsService] = {}
+    for profile in profiles:
+        for service in profile.services:
+            services[service.name] = service
+    portage_profiles = _dedupe(profile.portage_profile for profile in profiles if profile.portage_profile)
+    if len(portage_profiles) > 1:
+        joined = ", ".join(portage_profiles)
+        raise BuildError(f"rootfs profiles select conflicting Portage profiles: {joined}")
+
+    return RootfsProfile(
+        name="+".join(profile.name for profile in profiles),
+        paths=tuple(path for profile in profiles for path in profile.paths),
+        portage_profile=portage_profiles[0] if portage_profiles else "",
+        packages=_dedupe(item for profile in profiles for item in profile.packages),
+        rebuild=_dedupe(item for profile in profiles for item in profile.rebuild),
+        groups=_dedupe(item for profile in profiles for item in profile.groups),
+        bootstrap=tuple(item for profile in profiles for item in profile.bootstrap),
+        make_conf=_merge_make_conf(profile.make_conf for profile in profiles),
+        package_use=_dedupe(item for profile in profiles for item in profile.package_use),
+        accept_keywords=_dedupe(item for profile in profiles for item in profile.accept_keywords),
+        package_license=_dedupe(item for profile in profiles for item in profile.package_license),
+        services=tuple(services.values()),
+        files=tuple(item for profile in profiles for item in profile.files),
+    )
+
+
+def _profile_name(value: object) -> str:
+    if not isinstance(value, str):
+        raise BuildError(f"invalid rootfs profile name: {value}")
+    normalized = value.lower()
+    if not normalized or not normalized.replace("-", "").replace("_", "").isalnum():
+        raise BuildError(f"invalid rootfs profile name: {value}")
+    return normalized
+
+
+def _profile_portage_profile(data: dict[str, object]) -> str:
+    value = data.get("portage_profile", "")
+    if not isinstance(value, str):
+        raise BuildError("rootfs profile portage_profile must be a string")
+    if not value:
+        return ""
+    path = Path(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise BuildError(f"rootfs profile portage_profile must be a relative Gentoo profile path: {value}")
+    return path.as_posix()
+
+
+def _string_tuple(data: dict[str, object], key: str) -> tuple[str, ...]:
+    values = data.get(key, [])
+    if not isinstance(values, list):
+        raise BuildError(f"rootfs profile {key} must be a list")
+    result = []
+    for value in values:
+        if not isinstance(value, str) or not value:
+            raise BuildError(f"rootfs profile {key} entries must be non-empty strings")
+        result.append(value)
+    return tuple(result)
+
+
+def _profile_bootstrap(data: dict[str, object]) -> tuple[RootfsBootstrap, ...]:
+    values = data.get("bootstrap", [])
+    if not isinstance(values, list):
+        raise BuildError("rootfs profile bootstrap must be a list")
+    result = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise BuildError("rootfs profile bootstrap entries must be tables")
+        packages = _string_tuple(value, "packages")
+        if not packages:
+            raise BuildError("rootfs profile bootstrap packages must not be empty")
+        result.append(
+            RootfsBootstrap(
+                packages=packages,
+                use=_string_tuple(value, "use"),
+                rebuild=_string_tuple(value, "rebuild"),
+            )
+        )
+    return tuple(result)
+
+
+def _profile_make_conf(data: dict[str, object]) -> tuple[RootfsMakeConf, ...]:
+    values = data.get("make_conf", [])
+    if not isinstance(values, list):
+        raise BuildError("rootfs profile make_conf must be a list")
+    result = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise BuildError("rootfs profile make_conf entries must be tables")
+        key = value.get("key")
+        make_conf_value = value.get("value")
+        if not isinstance(key, str) or not key or not key.replace("_", "").isalnum() or key[0].isdigit():
+            raise BuildError(f"rootfs profile make_conf.key is invalid: {key}")
+        if not isinstance(make_conf_value, str):
+            raise BuildError(f"rootfs profile make_conf.value must be a string for {key}")
+        result.append(RootfsMakeConf(key=key, value=make_conf_value))
+    return tuple(result)
+
+
+def _merge_make_conf(values: object) -> tuple[RootfsMakeConf, ...]:
+    settings: dict[str, str] = {}
+    for profile_values in values:
+        for item in profile_values:
+            settings[item.key] = item.value
+    return tuple(RootfsMakeConf(key=key, value=value) for key, value in settings.items())
+
+
+def _profile_services(data: dict[str, object]) -> tuple[RootfsService, ...]:
+    values = data.get("services", [])
+    if not isinstance(values, list):
+        raise BuildError("rootfs profile services must be a list")
+    services = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise BuildError("rootfs profile service entries must be tables")
+        name = value.get("name")
+        runlevel = value.get("runlevel")
+        if not isinstance(name, str) or not name:
+            raise BuildError("rootfs profile service.name must be a non-empty string")
+        if not isinstance(runlevel, str) or runlevel not in SERVICE_RUNLEVELS:
+            raise BuildError(f"rootfs profile service.runlevel is invalid for {name}: {runlevel}")
+        services.append(RootfsService(name=name, runlevel=runlevel))
+    return tuple(services)
+
+
+def _profile_files(profile_path: Path, data: dict[str, object]) -> tuple[RootfsProfileFile, ...]:
+    values = data.get("files", [])
+    if not isinstance(values, list):
+        raise BuildError("rootfs profile files must be a list")
+    files = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise BuildError("rootfs profile file entries must be tables")
+        source = value.get("source")
+        target = value.get("target")
+        mode = value.get("mode")
+        if not isinstance(source, str) or not source:
+            raise BuildError("rootfs profile file.source must be a non-empty string")
+        if Path(source).is_absolute():
+            raise BuildError(f"rootfs profile file.source must be relative: {source}")
+        if not isinstance(target, str) or not target.startswith("/"):
+            raise BuildError(f"rootfs profile file.target must be an absolute path: {target}")
+        source_path = profile_path.parent / source
+        if not source_path.exists():
+            raise BuildError(f"rootfs profile file source does not exist: {source_path}")
+        files.append(
+            RootfsProfileFile(
+                source=source_path,
+                target=Path(target),
+                mode=_profile_file_mode(mode),
+            )
+        )
+    return tuple(files)
+
+
+def _profile_file_mode(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value, 8)
+        except ValueError as exc:
+            raise BuildError(f"rootfs profile file.mode must be an octal string: {value}") from exc
+    raise BuildError(f"rootfs profile file.mode must be an octal string: {value}")
+
+
+def _dedupe(values: object) -> tuple:
+    result = []
+    seen = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return tuple(result)
 
 
 def _git_head(path: Path) -> str:
@@ -276,7 +615,7 @@ def _git_head(path: Path) -> str:
     return (result.stdout or "").strip()
 
 
-def _validate_rootfs_build_config(config: BuildConfig) -> None:
+def _validate_rootfs_build_config(config: BuildConfig, profile: RootfsProfile) -> None:
     user = config.rootfs.user
     if not user.name:
         raise BuildError("rootfs.user.name is required")
@@ -286,13 +625,67 @@ def _validate_rootfs_build_config(config: BuildConfig) -> None:
         raise BuildError("rootfs.user.password_hash is required")
     if not user.password_hash.startswith("$"):
         raise BuildError("rootfs.user.password_hash must be a hashed password")
-    if "wheel" not in user.groups:
+    if "wheel" not in _user_groups(config, profile):
         raise BuildError("rootfs.user.groups must include wheel for sudo access")
     if user.ssh_authorized_keys and not user.ssh_authorized_keys.exists():
         raise BuildError(f"SSH authorized_keys file does not exist: {user.ssh_authorized_keys}")
 
 
-def _write_generated_files(config: BuildConfig, identity: DiskIdentity, root: Path) -> None:
+def _prepare_rootfs_cache(config: BuildConfig) -> RootfsCache:
+    cache = _rootfs_cache(config)
+    cache.distfiles_dir.mkdir(parents=True, exist_ok=True)
+    cache.binpkgs_dir.mkdir(parents=True, exist_ok=True)
+    print(f"rootfs cache: {config.paths.cache_dir / 'rootfs'}")
+    return cache
+
+
+def _rootfs_cache(config: BuildConfig) -> RootfsCache:
+    cache_dir = config.paths.cache_dir / "rootfs"
+    return RootfsCache(
+        distfiles_dir=cache_dir / "distfiles",
+        binpkgs_dir=cache_dir / "binpkgs",
+    )
+
+
+def _seed_rootfs_cache_from_workdir(work_dir: Path, cache: RootfsCache) -> None:
+    _seed_cache_dir(work_dir / "var/cache/distfiles", cache.distfiles_dir)
+    _seed_cache_dir(work_dir / "var/cache/binpkgs", cache.binpkgs_dir)
+
+
+def _seed_cache_dir(source: Path, target: Path) -> None:
+    if not source.exists() or not source.is_dir():
+        return
+    entries = list(source.iterdir())
+    if not entries:
+        return
+    if source.resolve(strict=False) == target.resolve(strict=False):
+        return
+    target.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for item in entries:
+        destination = target / item.name
+        if item.is_dir():
+            shutil.copytree(item, destination, dirs_exist_ok=True)
+            copied += 1
+        elif _should_copy_cache_file(item, destination):
+            shutil.copy2(item, destination)
+            copied += 1
+    if copied:
+        print(f"rootfs cache seeded from {source}: {copied} entries")
+
+
+def _should_copy_cache_file(source: Path, target: Path) -> bool:
+    if not target.exists():
+        return True
+    try:
+        source_stat = source.stat()
+        target_stat = target.stat()
+    except OSError:
+        return True
+    return source_stat.st_size != target_stat.st_size
+
+
+def _write_generated_files(config: BuildConfig, identity: DiskIdentity, profile: RootfsProfile, root: Path) -> None:
     _write_text(
         root / "etc/fstab",
         (
@@ -306,8 +699,9 @@ def _write_generated_files(config: BuildConfig, identity: DiskIdentity, root: Pa
     _write_text(root / "etc/timezone", f"{config.rootfs.timezone}\n")
     _write_text(root / "etc/env.d/02locale", f'LANG="{config.rootfs.locale}"\n')
     _ensure_line(root / "etc/locale.gen", f"{config.rootfs.locale} UTF-8")
-    _write_portage_make_conf(config, root)
-    _write_text(root / "etc/portage/package.license/gentoo-on-uconsole", "sys-kernel/linux-firmware *\n")
+    _write_portage_make_conf(config, profile, root)
+    _write_profile_portage_config(profile, root)
+    _install_profile_files(profile, root)
     _write_text(root / "etc/sudoers.d/wheel", "%wheel ALL=(ALL:ALL) ALL\n", mode=0o440)
     _write_text(
         root / "etc/init.d/ssh-hostkeys",
@@ -332,28 +726,66 @@ def _write_generated_files(config: BuildConfig, identity: DiskIdentity, root: Pa
     )
 
 
-def _write_portage_make_conf(config: BuildConfig, root: Path) -> None:
-    if not config.rootfs.distfiles_mirrors:
-        return
+def _user_groups(config: BuildConfig, profile: RootfsProfile) -> tuple[str, ...]:
+    return _dedupe((*config.rootfs.user.groups, *profile.groups))
+
+
+def _write_portage_make_conf(config: BuildConfig, profile: RootfsProfile, root: Path) -> None:
     make_conf = root / "etc/portage/make.conf"
     ensure_parent(make_conf)
     existing = make_conf.read_text(encoding="utf-8") if make_conf.exists() else ""
+    settings = {
+        "DISTDIR": "/var/cache/distfiles",
+        "MAKEOPTS": f"-j{config.rootfs.jobs} -l{config.rootfs.jobs}",
+        "NINJAOPTS": f"-j{config.rootfs.jobs} -l{config.rootfs.jobs}",
+        "PKGDIR": "/var/cache/binpkgs",
+    }
+    if config.rootfs.distfiles_mirrors:
+        settings["GENTOO_MIRRORS"] = " ".join(config.rootfs.distfiles_mirrors)
+    for item in profile.make_conf:
+        settings[item.key] = item.value
+    managed_keys = {"DISTDIR", "GENTOO_MIRRORS", "MAKEOPTS", "NINJAOPTS", "PKGDIR", "USE", *settings.keys()}
     lines = [
         line
         for line in existing.splitlines()
-        if not line.strip().startswith("GENTOO_MIRRORS=")
+        if not any(line.strip().startswith(f"{key}=") for key in managed_keys)
     ]
-    mirrors = " ".join(config.rootfs.distfiles_mirrors)
-    lines.append(f'GENTOO_MIRRORS="{mirrors}"')
+    for key, value in settings.items():
+        lines.append(f'{key}="{_make_conf_quote(value)}"')
     make_conf.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _configure_chroot(config: BuildConfig, root: Path) -> None:
+def _make_conf_quote(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _write_profile_portage_config(profile: RootfsProfile, root: Path) -> None:
+    _write_portage_lines(root / "etc/portage/package.use/gentoo-on-uconsole", profile.package_use)
+    _write_portage_lines(root / "etc/portage/package.accept_keywords/gentoo-on-uconsole", profile.accept_keywords)
+    _write_portage_lines(root / "etc/portage/package.license/gentoo-on-uconsole", profile.package_license)
+
+
+def _write_portage_lines(path: Path, lines: tuple[str, ...]) -> None:
+    if not lines:
+        return
+    _write_text(path, "\n".join(lines) + "\n")
+
+
+def _install_profile_files(profile: RootfsProfile, root: Path) -> None:
+    for item in profile.files:
+        target = root / item.target.relative_to("/")
+        ensure_parent(target)
+        shutil.copy2(item.source, target)
+        if item.mode is not None:
+            target.chmod(item.mode)
+
+
+def _configure_chroot(config: BuildConfig, profile: RootfsProfile, root: Path) -> None:
     qemu_copied = _install_qemu_static(root)
     script = root / "tmp/gonu-rootfs-config.sh"
     authorized_keys = _install_authorized_keys(config, root)
     resolv_backup = _install_build_resolv_conf(root)
-    _write_text(script, _chroot_script(config, authorized_keys is not None), mode=0o700)
+    _write_text(script, _chroot_script(config, profile, authorized_keys is not None), mode=0o700)
 
     try:
         _mount_chroot(config, root)
@@ -409,11 +841,22 @@ def _restore_resolv_conf(root: Path, backup: Path | None) -> None:
 
 
 def _mount_chroot(config: BuildConfig, root: Path) -> None:
+    cache = _rootfs_cache(config)
     mounts = [
         (["mount", "-t", "proc", "proc", str(root / "proc")], root / "proc", False),
         (["mount", "--rbind", "/sys", str(root / "sys")], root / "sys", True),
         (["mount", "--rbind", "/dev", str(root / "dev")], root / "dev", True),
         (["mount", "--rbind", "/run", str(root / "run")], root / "run", True),
+        (
+            ["mount", "--bind", str(cache.distfiles_dir), str(root / "var/cache/distfiles")],
+            root / "var/cache/distfiles",
+            False,
+        ),
+        (
+            ["mount", "--bind", str(cache.binpkgs_dir), str(root / "var/cache/binpkgs")],
+            root / "var/cache/binpkgs",
+            False,
+        ),
     ]
     for args, mountpoint, make_rslave in mounts:
         mountpoint.mkdir(parents=True, exist_ok=True)
@@ -476,23 +919,36 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
         process.wait()
 
 
-def _chroot_script(config: BuildConfig, has_authorized_keys: bool) -> str:
+def _chroot_script(config: BuildConfig, profile: RootfsProfile, has_authorized_keys: bool) -> str:
     user = config.rootfs.user
-    groups = ",".join(user.groups)
+    user_groups = _user_groups(config, profile)
+    groups = ",".join(user_groups)
     lines = [
         "#!/bin/bash",
         "set -euo pipefail",
         'export ACCEPT_LICENSE="*"',
         'export FEATURES="-ipc-sandbox -mount-sandbox -network-sandbox -pid-sandbox"',
-        "emerge --usepkg=y --getbinpkg=y --with-bdeps=n --noreplace app-admin/sudo sys-kernel/linux-firmware",
-        f"for group in {sh_quote_list(user.groups)}; do getent group \"$group\" >/dev/null || groupadd \"$group\"; done",
-        f"if id -u {sh_quote(user.name)} >/dev/null 2>&1; then",
-        f"    usermod -a -G {sh_quote(groups)} {sh_quote(user.name)}",
-        "else",
-        f"    useradd -m -s /bin/bash -G {sh_quote(groups)} {sh_quote(user.name)}",
-        "fi",
-        f"printf '%s:%s\\n' {sh_quote(user.name)} {sh_quote(user.password_hash)} | chpasswd -e",
     ]
+    for item in profile.bootstrap:
+        lines.append(_emerge_command(config, EMERGE_ROOTFS_BOOTSTRAP_OPTIONS, item.packages, use=item.use))
+    if profile.packages:
+        lines.append(_emerge_command(config, EMERGE_ROOTFS_INSTALL_OPTIONS, profile.packages))
+    for item in profile.bootstrap:
+        if item.rebuild:
+            lines.append(_emerge_command(config, EMERGE_ROOTFS_REBUILD_OPTIONS, item.rebuild))
+    if profile.rebuild:
+        lines.append(_emerge_command(config, EMERGE_ROOTFS_REBUILD_OPTIONS, profile.rebuild))
+    lines.extend(
+        [
+            f"for group in {sh_quote_list(user_groups)}; do getent group \"$group\" >/dev/null || groupadd \"$group\"; done",
+            f"if id -u {sh_quote(user.name)} >/dev/null 2>&1; then",
+            f"    usermod -a -G {sh_quote(groups)} {sh_quote(user.name)}",
+            "else",
+            f"    useradd -m -s /bin/bash -G {sh_quote(groups)} {sh_quote(user.name)}",
+            "fi",
+            f"printf '%s:%s\\n' {sh_quote(user.name)} {sh_quote(user.password_hash)} | chpasswd -e",
+        ]
+    )
     if has_authorized_keys:
         lines.extend(
             [
@@ -509,12 +965,29 @@ def _chroot_script(config: BuildConfig, has_authorized_keys: bool) -> str:
             "env-update",
             "rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub",
             "add_service() { rc-update show \"$2\" | awk '{ print $1 }' | grep -qx \"$1\" || rc-update add \"$1\" \"$2\"; }",
-            "add_service dhcpcd default",
-            "add_service ssh-hostkeys default",
-            "add_service sshd default",
         ]
     )
+    for service in profile.services:
+        lines.append(f"add_service {sh_quote(service.name)} {sh_quote(service.runlevel)}")
     return "\n".join(lines) + "\n"
+
+
+def _emerge_command(
+    config: BuildConfig,
+    options: tuple[str, ...],
+    packages: tuple[str, ...],
+    *,
+    use: tuple[str, ...] = (),
+) -> str:
+    command_options = (
+        *options,
+        f"--jobs={config.rootfs.emerge_jobs}",
+        f"--load-average={config.rootfs.emerge_load_average}",
+    )
+    command = "emerge " + " ".join(command_options) + " " + sh_quote_list(packages)
+    if use:
+        command = "USE=" + sh_quote(" ".join(use)) + " " + command
+    return command
 
 
 def sh_quote(value: str) -> str:

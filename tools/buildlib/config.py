@@ -19,6 +19,7 @@ class BoardConfig:
 class PathsConfig:
     build_dir: Path
     sources_dir: Path
+    cache_dir: Path
     work_dir: Path
     artifacts_dir: Path
     logs_dir: Path
@@ -64,6 +65,9 @@ class RootfsConfig:
     repository_ref: str
     repository_dir: Path
     distfiles_mirrors: tuple[str, ...]
+    jobs: int
+    emerge_jobs: int
+    emerge_load_average: int
     overlay_dir: Path
     work_dir: Path
     hostname: str
@@ -71,6 +75,7 @@ class RootfsConfig:
     locale: str
     keymap: str
     user: RootfsUserConfig
+    desktop: RootfsDesktopConfig
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,11 @@ class RootfsUserConfig:
     password_hash: str
     groups: tuple[str, ...]
     ssh_authorized_keys: Path | None
+
+
+@dataclass(frozen=True)
+class RootfsDesktopConfig:
+    profile: str
 
 
 @dataclass(frozen=True)
@@ -150,12 +160,15 @@ class BuildConfig:
                 data = _merge_dict(data, tomllib.load(handle))
 
         try:
+            paths_data = data["paths"]
+            build_dir = _path(root, paths_data["build_dir"])
             paths = PathsConfig(
-                build_dir=_path(root, data["paths"]["build_dir"]),
-                sources_dir=_path(root, data["paths"]["sources_dir"]),
-                work_dir=_path(root, data["paths"]["work_dir"]),
-                artifacts_dir=_path(root, data["paths"]["artifacts_dir"]),
-                logs_dir=_path(root, data["paths"]["logs_dir"]),
+                build_dir=build_dir,
+                sources_dir=_path(root, paths_data["sources_dir"]),
+                cache_dir=_path(root, paths_data.get("cache_dir", str(build_dir / "cache"))),
+                work_dir=_path(root, paths_data["work_dir"]),
+                artifacts_dir=_path(root, paths_data["artifacts_dir"]),
+                logs_dir=_path(root, paths_data["logs_dir"]),
             )
             board = BoardConfig(
                 name=data["board"]["name"],
@@ -201,6 +214,9 @@ class BuildConfig:
             )
             rootfs_data = data["rootfs"]
             rootfs_user_data = rootfs_data.get("user", {})
+            rootfs_desktop_data = rootfs_data.get("desktop", {})
+            rootfs_jobs = _positive_int(rootfs_data.get("jobs", 4), "rootfs.jobs")
+            rootfs_emerge_jobs = _positive_int(rootfs_data.get("emerge_jobs", rootfs_jobs), "rootfs.emerge_jobs")
             rootfs = RootfsConfig(
                 stage3=rootfs_data.get("stage3", ""),
                 stage3_url=rootfs_data.get("stage3_url", ""),
@@ -210,6 +226,12 @@ class BuildConfig:
                 repository_ref=rootfs_data.get("repository_ref", ""),
                 repository_dir=_path(root, rootfs_data["repository_dir"]),
                 distfiles_mirrors=tuple(rootfs_data.get("distfiles_mirrors", [])),
+                jobs=rootfs_jobs,
+                emerge_jobs=rootfs_emerge_jobs,
+                emerge_load_average=_positive_int(
+                    rootfs_data.get("emerge_load_average", rootfs_emerge_jobs),
+                    "rootfs.emerge_load_average",
+                ),
                 overlay_dir=_path(root, rootfs_data["overlay_dir"]),
                 work_dir=_path(root, rootfs_data["work_dir"]),
                 hostname=rootfs_data["hostname"],
@@ -221,6 +243,9 @@ class BuildConfig:
                     password_hash=rootfs_user_data.get("password_hash", ""),
                     groups=tuple(rootfs_user_data.get("groups", [])),
                     ssh_authorized_keys=_optional_path(root, rootfs_user_data.get("ssh_authorized_keys")),
+                ),
+                desktop=RootfsDesktopConfig(
+                    profile=_desktop_profile(rootfs_desktop_data.get("profile", "none")),
                 ),
             )
             disk_data = data["disk"]
@@ -266,6 +291,16 @@ def _optional_path(root: Path, value: str | None) -> Path | None:
     return _path(root, value)
 
 
+def _positive_int(value: object, key: str) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BuildError(f"{key} must be a positive integer: {value}") from exc
+    if result <= 0:
+        raise BuildError(f"{key} must be a positive integer: {value}")
+    return result
+
+
 def _kernel_version_from_ref(ref: str) -> str:
     if ref.startswith("rpi-"):
         return ref.removeprefix("rpi-")
@@ -286,6 +321,17 @@ def _partition_table(value: str) -> str:
     normalized = value.lower()
     if normalized != "gpt":
         raise BuildError(f"unsupported disk.partition_table: {value}")
+    return normalized
+
+
+def _desktop_profile(value: object) -> str:
+    if not isinstance(value, str):
+        raise BuildError(f"unsupported rootfs.desktop.profile: {value}")
+    normalized = value.lower()
+    if not normalized:
+        raise BuildError("rootfs.desktop.profile must not be empty")
+    if normalized != "none" and not normalized.replace("-", "").replace("_", "").isalnum():
+        raise BuildError(f"unsupported rootfs.desktop.profile: {value}")
     return normalized
 
 

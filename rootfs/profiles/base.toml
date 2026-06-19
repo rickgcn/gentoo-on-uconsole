@@ -1,0 +1,16 @@
+[profile]
+name = "base"
+
+packages = [
+  "app-admin/sudo",
+  "sys-kernel/linux-firmware",
+]
+
+package_license = [
+  "sys-kernel/linux-firmware *",
+]
+
+services = [
+  { name = "ssh-hostkeys", runlevel = "default" },
+  { name = "sshd", runlevel = "default" },
+]

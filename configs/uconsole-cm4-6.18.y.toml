@@ -6,6 +6,7 @@ arch = "arm64"
 [paths]
 build_dir = "build"
 sources_dir = "build/sources"
+cache_dir = "build/cache"
 work_dir = "build/work"
 artifacts_dir = "build/artifacts"
 logs_dir = "build/logs"
@@ -77,6 +78,9 @@ stage3_size = 414053796
 repository_url = "https://github.com/gentoo/gentoo.git"
 repository_ref = "master"
 repository_dir = "build/sources/rootfs/gentoo"
+jobs = 4
+emerge_jobs = 10
+emerge_load_average = 10
 overlay_dir = "rootfs/overlay"
 work_dir = "build/work/rootfs/uconsole-cm4"
 hostname = "uconsole"
