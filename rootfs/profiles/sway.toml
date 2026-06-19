@@ -1,0 +1,141 @@
+[profile]
+name = "sway"
+portage_profile = "default/linux/arm64/23.0/desktop"
+
+packages = [
+  "app-arch/p7zip",
+  "app-arch/unzip",
+  "app-arch/zip",
+  "app-editors/nano",
+  "app-editors/neovim",
+  "app-misc/fastfetch",
+  "app-misc/jq",
+  "app-misc/tmux",
+  "app-misc/yq",
+  "app-portage/eix",
+  "app-portage/gentoolkit",
+  "app-shells/fzf",
+  "app-shells/zsh",
+  "dev-libs/bemenu",
+  "gnome-extra/nm-applet",
+  "gnome-extra/polkit-gnome",
+  "gui-apps/foot",
+  "gui-apps/grim",
+  "gui-apps/mako",
+  "gui-apps/slurp",
+  "gui-apps/swaybg",
+  "gui-apps/swayidle",
+  "gui-apps/swaylock",
+  "gui-apps/waybar",
+  "gui-apps/wl-clipboard",
+  "gui-libs/xdg-desktop-portal-wlr",
+  "gui-wm/sway",
+  "media-fonts/fontawesome",
+  "media-fonts/noto",
+  "media-fonts/noto-cjk",
+  "media-fonts/noto-emoji",
+  "media-gfx/imv",
+  "media-libs/vulkan-loader",
+  "media-sound/alsa-utils",
+  "media-sound/pavucontrol",
+  "media-sound/playerctl",
+  "media-video/mpv",
+  "media-video/pipewire",
+  "media-video/wireplumber",
+  "net-misc/chrony",
+  "net-misc/curl",
+  "net-misc/networkmanager",
+  "net-misc/rsync",
+  "net-misc/wget",
+  "net-wireless/blueman",
+  "net-wireless/bluez",
+  "sys-apps/dbus",
+  "sys-apps/ethtool",
+  "sys-apps/fd",
+  "sys-apps/lm-sensors",
+  "sys-apps/pciutils",
+  "sys-apps/ripgrep",
+  "sys-apps/smartmontools",
+  "sys-apps/usbutils",
+  "sys-apps/xdg-desktop-portal",
+  "sys-apps/xdg-desktop-portal-gtk",
+  "sys-auth/elogind",
+  "sys-auth/polkit",
+  "sys-auth/rtkit",
+  "sys-auth/seatd",
+  "sys-fs/exfatprogs",
+  "sys-fs/ntfs3g",
+  "sys-power/acpilight",
+  "sys-power/upower",
+  "sys-process/btop",
+  "www-client/firefox-bin",
+  "x11-base/xwayland",
+  "x11-misc/shared-mime-info",
+  "x11-misc/xdg-user-dirs",
+  "x11-misc/xdg-utils",
+  "x11-themes/adwaita-icon-theme",
+  "x11-themes/papirus-icon-theme",
+]
+
+rebuild = [
+  "sys-auth/pambase",
+]
+
+groups = [
+  "audio",
+  "input",
+  "pipewire",
+  "plugdev",
+  "video",
+]
+
+package_use = [
+  "dev-libs/bemenu -ncurses -X",
+  "dev-libs/libdbusmenu gtk3",
+  "gnome-extra/nm-applet appindicator",
+  "gui-apps/swaybg gdk-pixbuf",
+  "gui-apps/waybar backlight evdev mpris network tray upower",
+  "gui-wm/sway wallpapers swaybar swaynag -tray",
+  "media-video/pipewire pipewire-alsa ssl v4l -system-service",
+  "media-video/wireplumber -system-service",
+  "net-misc/networkmanager tools -dhclient -dhcpcd",
+  "net-wireless/blueman network",
+  "net-wireless/bluez mesh obex readline",
+  "sys-auth/seatd -server",
+]
+
+bootstrap = [
+  { packages = ["dev-python/docutils"], use = ["-truetype"], rebuild = ["dev-python/pillow"] },
+]
+
+accept_keywords = [
+  "app-editors/neovim ~arm64",
+  "app-misc/fastfetch ~arm64",
+  "dev-libs/date ~arm64",
+  "gui-apps/mako ~arm64",
+  "gui-apps/waybar ~arm64",
+  "gui-libs/xdg-desktop-portal-wlr ~arm64",
+  "media-sound/pavucontrol ~arm64",
+  "sys-fs/exfatprogs ~arm64",
+  "sys-power/acpilight **",
+]
+
+services = [
+  { name = "dbus", runlevel = "default" },
+  { name = "elogind", runlevel = "boot" },
+  { name = "NetworkManager", runlevel = "default" },
+  { name = "bluetooth", runlevel = "default" },
+  { name = "chronyd", runlevel = "default" },
+  { name = "acpilight", runlevel = "boot" },
+]
+
+files = [
+  { source = "sway/etc/sway/config", target = "/etc/sway/config", mode = "0644" },
+  { source = "sway/etc/xdg/foot/foot.ini", target = "/etc/xdg/foot/foot.ini", mode = "0644" },
+  { source = "sway/etc/xdg/gtk-3.0/settings.ini", target = "/etc/xdg/gtk-3.0/settings.ini", mode = "0644" },
+  { source = "sway/etc/xdg/gtk-4.0/settings.ini", target = "/etc/xdg/gtk-4.0/settings.ini", mode = "0644" },
+  { source = "sway/etc/xdg/mako/config", target = "/etc/xdg/mako/config", mode = "0644" },
+  { source = "sway/etc/xdg/waybar/config", target = "/etc/xdg/waybar/config", mode = "0644" },
+  { source = "sway/etc/xdg/waybar/style.css", target = "/etc/xdg/waybar/style.css", mode = "0644" },
+  { source = "sway/etc/xdg/xdg-desktop-portal/sway-portals.conf", target = "/etc/xdg/xdg-desktop-portal/sway-portals.conf", mode = "0644" },
+]

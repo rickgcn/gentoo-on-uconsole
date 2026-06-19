@@ -1,0 +1,45 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "spacing": 6,
+  "modules-left": ["sway/workspaces", "sway/mode"],
+  "modules-center": ["clock"],
+  "modules-right": ["tray", "network", "pulseaudio", "backlight", "battery", "custom/power"],
+  "sway/workspaces": {
+    "disable-scroll": true,
+    "format": "{name}"
+  },
+  "clock": {
+    "format": "{:%a %H:%M}",
+    "tooltip-format": "{:%Y-%m-%d}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline",
+    "tooltip-format": "{ifname} {essid} {ipaddr}"
+  },
+  "pulseaudio": {
+    "format": "vol {volume}",
+    "format-muted": "muted",
+    "scroll-step": 5,
+    "on-click": "pavucontrol"
+  },
+  "backlight": {
+    "format": "bl {percent}",
+    "scroll-step": 10
+  },
+  "battery": {
+    "format": "bat {capacity}",
+    "format-charging": "chg {capacity}",
+    "format-full": "full"
+  },
+  "tray": {
+    "spacing": 8
+  },
+  "custom/power": {
+    "format": "power",
+    "on-click": "swaynag -t warning -m 'Power menu' -B 'Lock' 'swaylock -f -c 101418' -B 'Exit' 'swaymsg exit' -B 'Reboot' 'loginctl reboot' -B 'Poweroff' 'loginctl poweroff'"
+  }
+}
