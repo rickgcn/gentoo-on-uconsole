@@ -36,6 +36,7 @@ CHROOT_MOUNT_NAMES = ("proc", "sys", "dev", "run", "var/cache/distfiles", "var/c
 ROOTFS_PROFILE_DIR = Path("rootfs/profiles")
 BASE_PROFILE = "base"
 SERVICE_RUNLEVELS = ("boot", "default", "nonetwork", "shutdown", "sysinit")
+LOCAL_REPOSITORY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 EMERGE_ROOTFS_INSTALL_OPTIONS = (
     "--usepkg=y",
     "--getbinpkg=y",
@@ -112,6 +113,12 @@ class RootfsCache:
     binpkgs_dir: Path
 
 
+@dataclass(frozen=True)
+class LocalPortageRepository:
+    name: str
+    source: Path
+
+
 def prepare_rootfs(config: BuildConfig, *, force: bool = False) -> None:
     _prepare_stage3(config, force=force)
     _prepare_gentoo_repository(config, force=force)
@@ -165,6 +172,7 @@ def _prepare_gentoo_repository(config: BuildConfig, *, force: bool = False) -> N
 
 def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = True) -> None:
     profile = _load_rootfs_profile(config)
+    local_portage_repositories = _local_portage_repositories(config)
     _validate_rootfs_build_config(config, profile)
     if prepare:
         prepare_rootfs(config)
@@ -194,6 +202,7 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
     extract_archive(stage3, work_dir, verbose=config.verbose)
     extract_archive(modules_archive, work_dir, keep_directory_symlink=True, verbose=config.verbose)
     _install_gentoo_repository(config, work_dir)
+    _install_local_portage_repositories(local_portage_repositories, work_dir)
     _configure_portage_profile(profile, work_dir)
     _require_rootfs_profile(work_dir)
     _write_generated_files(config, identity, profile, work_dir)
@@ -217,6 +226,14 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
                 "repository_url": config.rootfs.repository_url,
                 "repository_ref": config.rootfs.repository_ref,
                 "repository_commit": _git_head(config.rootfs.repository_dir),
+                "portage_repositories_dir": _optional_relative(config.rootfs.portage_repositories_dir, config.root),
+                "portage_repositories": [
+                    {
+                        "name": item.name,
+                        "source": _relative_or_absolute(item.source, config.root),
+                    }
+                    for item in local_portage_repositories
+                ],
                 "modules": str(modules_archive.relative_to(config.root)),
                 "overlay_dir": _optional_relative(config.rootfs.overlay_dir, config.root),
                 "disk_identity": str(config.disk_identity_path.relative_to(config.root)),
@@ -360,6 +377,61 @@ def _install_gentoo_repository(config: BuildConfig, root: Path) -> None:
         safe_rmtree(target, root)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, target, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+
+
+def _local_portage_repositories(config: BuildConfig) -> tuple[LocalPortageRepository, ...]:
+    repositories_dir = config.rootfs.portage_repositories_dir
+    if not repositories_dir.exists():
+        return ()
+    if not repositories_dir.is_dir():
+        raise BuildError(f"rootfs.portage_repositories_dir is not a directory: {repositories_dir}")
+
+    repositories = []
+    for source in sorted(path for path in repositories_dir.iterdir() if path.is_dir()):
+        repositories.append(_read_local_portage_repository(source))
+    return tuple(repositories)
+
+
+def _read_local_portage_repository(source: Path) -> LocalPortageRepository:
+    repo_name_path = source / "profiles/repo_name"
+    layout_path = source / "metadata/layout.conf"
+    if not repo_name_path.exists():
+        raise BuildError(f"local Portage repository is missing profiles/repo_name: {source}")
+    if not layout_path.exists():
+        raise BuildError(f"local Portage repository is missing metadata/layout.conf: {source}")
+
+    name = repo_name_path.read_text(encoding="utf-8").strip()
+    if not LOCAL_REPOSITORY_NAME_PATTERN.fullmatch(name):
+        raise BuildError(f"local Portage repository name is invalid: {name}")
+    if name != source.name:
+        raise BuildError(f"local Portage repository directory must match repo_name: {source.name} != {name}")
+    return LocalPortageRepository(name=name, source=source)
+
+
+def _install_local_portage_repositories(repositories: tuple[LocalPortageRepository, ...], root: Path) -> None:
+    for repository in repositories:
+        target = root / "var/db/repos" / repository.name
+        if target.exists():
+            safe_rmtree(target, root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(repository.source, target, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+        _write_local_portage_repository_config(repository, root)
+
+
+def _write_local_portage_repository_config(repository: LocalPortageRepository, root: Path) -> None:
+    config = (
+        f"[{repository.name}]\n"
+        f"location = /var/db/repos/{repository.name}\n"
+        "masters = gentoo\n"
+        "auto-sync = no\n"
+    )
+    repos_conf = root / "etc/portage/repos.conf"
+    if repos_conf.exists() and repos_conf.is_file():
+        existing = repos_conf.read_text(encoding="utf-8")
+        separator = "" if existing.endswith("\n") else "\n"
+        repos_conf.write_text(existing + separator + "\n" + config, encoding="utf-8")
+        return
+    _write_text(repos_conf / f"{repository.name}.conf", config)
 
 
 def _configure_portage_profile(profile: RootfsProfile, root: Path) -> None:

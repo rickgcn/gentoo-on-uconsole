@@ -78,6 +78,7 @@ stage3_size = 414053796
 repository_url = "https://github.com/gentoo/gentoo.git"
 repository_ref = "master"
 repository_dir = "build/sources/rootfs/gentoo"
+portage_repositories_dir = "rootfs/portage"
 jobs = 4
 emerge_jobs = 10
 emerge_load_average = 10

@@ -64,6 +64,7 @@ class RootfsConfig:
     repository_url: str
     repository_ref: str
     repository_dir: Path
+    portage_repositories_dir: Path
     distfiles_mirrors: tuple[str, ...]
     jobs: int
     emerge_jobs: int
@@ -225,6 +226,7 @@ class BuildConfig:
                 repository_url=rootfs_data.get("repository_url", ""),
                 repository_ref=rootfs_data.get("repository_ref", ""),
                 repository_dir=_path(root, rootfs_data["repository_dir"]),
+                portage_repositories_dir=_path(root, rootfs_data["portage_repositories_dir"]),
                 distfiles_mirrors=tuple(rootfs_data.get("distfiles_mirrors", [])),
                 jobs=rootfs_jobs,
                 emerge_jobs=rootfs_emerge_jobs,
