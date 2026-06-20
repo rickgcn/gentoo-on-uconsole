@@ -6,6 +6,7 @@ packages = [
   "app-arch/p7zip",
   "app-arch/unzip",
   "app-arch/zip",
+  "app-editors/mousepad",
   "app-editors/nano",
   "app-editors/neovim",
   "app-misc/fastfetch",
@@ -16,7 +17,8 @@ packages = [
   "app-portage/gentoolkit",
   "app-shells/fzf",
   "app-shells/zsh",
-  "dev-libs/bemenu",
+  "app-text/evince",
+  "gnome-base/gvfs",
   "gnome-extra/nm-applet",
   "gnome-extra/polkit-gnome",
   "gui-apps/foot",
@@ -24,12 +26,14 @@ packages = [
   "gui-apps/grim",
   "gui-apps/mako",
   "gui-apps/slurp",
+  "gui-apps/swappy",
   "gui-apps/swaybg",
   "gui-apps/swayidle",
   "gui-apps/swaylock",
   "gui-apps/waybar",
   "gui-apps/wl-clipboard",
   "gui-apps/wlogout",
+  "gui-apps/wofi",
   "gui-libs/display-manager-init",
   "gui-libs/greetd",
   "gui-libs/xdg-desktop-portal-wlr",
@@ -79,6 +83,7 @@ packages = [
   "x11-misc/xdg-utils",
   "x11-themes/adwaita-icon-theme",
   "x11-themes/papirus-icon-theme",
+  "xfce-base/thunar",
 ]
 
 rebuild = [
@@ -98,7 +103,6 @@ make_conf = [
 ]
 
 package_use = [
-  "dev-libs/bemenu -ncurses -X",
   "dev-libs/libdbusmenu gtk3",
   "gnome-extra/nm-applet appindicator",
   "gui-apps/gtkgreet layershell",
@@ -112,6 +116,7 @@ package_use = [
   "net-wireless/blueman network",
   "net-wireless/bluez mesh obex readline",
   "sys-auth/seatd -server",
+  "xfce-base/thunar -trash-panel-plugin",
 ]
 
 bootstrap = [
@@ -125,7 +130,9 @@ accept_keywords = [
   "gui-apps/gtkgreet ~arm64",
   "gui-apps/mako ~arm64",
   "gui-apps/waybar ~arm64",
+  "gui-apps/swappy **",
   "gui-apps/wlogout ~arm64",
+  "gui-apps/wofi **",
   "gui-libs/greetd ~arm64",
   "gui-libs/xdg-desktop-portal-wlr ~arm64",
   "media-sound/pavucontrol ~arm64",

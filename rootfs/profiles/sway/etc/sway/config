@@ -1,6 +1,6 @@
 set $mod Mod4
 set $term foot
-set $menu bemenu-run | xargs swaymsg exec --
+set $menu wofi --show drun
 
 font pango:Noto Sans 10
 floating_modifier $mod normal
@@ -102,6 +102,7 @@ bindsym $mod+space focus mode_toggle
 bindsym $mod+a focus parent
 
 bindsym Print exec grim -g "$(slurp)" - | wl-copy
+bindsym $mod+Print exec grim -g "$(slurp)" - | swappy -f -
 bindsym Shift+Print exec sh -c 'mkdir -p "$HOME/Pictures/Screenshots"; grim "$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png"'
 
 bindsym XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
