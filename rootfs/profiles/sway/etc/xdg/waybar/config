@@ -40,6 +40,6 @@
   },
   "custom/power": {
     "format": "power",
-    "on-click": "power-menu"
+    "on-click": "wlogout"
   }
 }
