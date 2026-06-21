@@ -1,6 +1,8 @@
 set $mod Mod4
 set $term foot
-set $menu wofi --show drun
+set $launcher systemctl --user start wofi-drun.service
+set $power_menu systemctl --user start wlogout.service
+set $lock swaylock -f -c 101418
 
 font pango:Noto Sans 10
 floating_modifier $mod normal
@@ -37,31 +39,46 @@ output * bg $bg solid_color
 exec "export XDG_CURRENT_DESKTOP=sway XDG_SESSION_DESKTOP=sway XDG_SESSION_TYPE=wayland MOZ_ENABLE_WAYLAND=1 QT_QPA_PLATFORM=wayland SDL_VIDEODRIVER=wayland _JAVA_AWT_WM_NONREPARENTING=1; systemctl --user import-environment DISPLAY WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE MOZ_ENABLE_WAYLAND QT_QPA_PLATFORM SDL_VIDEODRIVER _JAVA_AWT_WM_NONREPARENTING; dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE MOZ_ENABLE_WAYLAND QT_QPA_PLATFORM SDL_VIDEODRIVER _JAVA_AWT_WM_NONREPARENTING; systemctl --user start sway-session.target"
 exec swaymsg -t subscribe '["shutdown"]' && systemctl --user stop sway-session.target
 
-bindsym $mod+Return exec $term
-bindsym $mod+d exec $menu
-bindsym $mod+Shift+q kill
+# Launching and session actions
+bindsym --no-repeat $mod+Return exec $term
+bindsym --no-repeat $mod+space exec $launcher
+bindsym --no-repeat $mod+d exec $launcher
+bindsym --no-repeat $mod+e exec thunar
+bindsym --no-repeat $mod+m exec pavucontrol
+bindsym --no-repeat $mod+p exec $power_menu
+bindsym --no-repeat $mod+Shift+e exec $power_menu
+bindsym --no-repeat XF86PowerOff exec $power_menu
+bindsym --no-repeat $mod+Escape exec $lock
+bindsym --no-repeat $mod+Ctrl+l exec $lock
 bindsym $mod+Shift+c reload
-bindsym $mod+Shift+e exec wlogout
-bindsym $mod+Ctrl+l exec swaylock -f -c 101418
-bindsym XF86PowerOff exec wlogout
+bindsym $mod+Shift+q kill
 
-bindsym $mod+h focus left
-bindsym $mod+j focus down
-bindsym $mod+k focus up
-bindsym $mod+l focus right
+# Focus and movement
 bindsym $mod+Left focus left
 bindsym $mod+Down focus down
 bindsym $mod+Up focus up
 bindsym $mod+Right focus right
+bindsym $mod+h focus left
+bindsym $mod+j focus down
+bindsym $mod+k focus up
+bindsym $mod+l focus right
 
-bindsym $mod+Shift+h move left
-bindsym $mod+Shift+j move down
-bindsym $mod+Shift+k move up
-bindsym $mod+Shift+l move right
 bindsym $mod+Shift+Left move left
 bindsym $mod+Shift+Down move down
 bindsym $mod+Shift+Up move up
 bindsym $mod+Shift+Right move right
+bindsym $mod+Shift+h move left
+bindsym $mod+Shift+j move down
+bindsym $mod+Shift+k move up
+bindsym $mod+Shift+l move right
+
+# Workspaces
+bindsym $mod+Tab workspace next_on_output
+bindsym $mod+Shift+Tab workspace prev_on_output
+bindsym $mod+Ctrl+Right workspace next_on_output
+bindsym $mod+Ctrl+Left workspace prev_on_output
+bindsym $mod+Ctrl+Shift+Right move container to workspace next_on_output; workspace next_on_output
+bindsym $mod+Ctrl+Shift+Left move container to workspace prev_on_output; workspace prev_on_output
 
 bindsym $mod+1 workspace number 1
 bindsym $mod+2 workspace number 2
@@ -85,40 +102,53 @@ bindsym $mod+Shift+8 move container to workspace number 8
 bindsym $mod+Shift+9 move container to workspace number 9
 bindsym $mod+Shift+0 move container to workspace number 10
 
+# Layout and scratchpad
 bindsym $mod+b splith
 bindsym $mod+v splitv
+bindsym $mod+o layout toggle split
 bindsym $mod+s layout stacking
-bindsym $mod+w layout tabbed
-bindsym $mod+e layout toggle split
+bindsym $mod+t layout tabbed
 bindsym $mod+f fullscreen
 bindsym $mod+Shift+space floating toggle
-bindsym $mod+space focus mode_toggle
+bindsym $mod+Ctrl+space focus mode_toggle
 bindsym $mod+a focus parent
+bindsym $mod+grave scratchpad show
+bindsym $mod+Shift+grave move scratchpad
 
-bindsym Print exec grim -g "$(slurp)" - | wl-copy
-bindsym $mod+Print exec grim -g "$(slurp)" - | swappy -f -
-bindsym Shift+Print exec sh -c 'mkdir -p "$HOME/Pictures/Screenshots"; grim "$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png"'
+# Screenshots
+bindsym --no-repeat Print exec grim -g "$(slurp)" - | wl-copy
+bindsym --no-repeat $mod+Print exec grim -g "$(slurp)" - | swappy -f -
+bindsym --no-repeat Shift+Print exec sh -c 'mkdir -p "$HOME/Pictures/Screenshots"; grim "$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png"'
+bindsym --no-repeat $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
+bindsym --no-repeat $mod+Ctrl+s exec sh -c 'mkdir -p "$HOME/Pictures/Screenshots"; grim -g "$(slurp)" "$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png"'
 
-bindsym XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
-bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
-bindsym XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
-bindsym XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
-bindsym XF86AudioPlay exec playerctl play-pause
-bindsym XF86AudioNext exec playerctl next
-bindsym XF86AudioPrev exec playerctl previous
-bindsym XF86MonBrightnessUp exec xbacklight -inc 10
-bindsym XF86MonBrightnessDown exec xbacklight -dec 10
+# Media and hardware controls
+bindsym --locked XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym --locked XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym --locked XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym --locked XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+bindsym --locked XF86AudioPlay exec playerctl play-pause
+bindsym --locked XF86AudioNext exec playerctl next
+bindsym --locked XF86AudioPrev exec playerctl previous
+bindsym --locked XF86MonBrightnessUp exec xbacklight -inc 10
+bindsym --locked XF86MonBrightnessDown exec xbacklight -dec 10
+bindsym --locked $mod+equal exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym --locked $mod+minus exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym --locked $mod+Shift+m exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym --locked $mod+bracketright exec xbacklight -inc 10
+bindsym --locked $mod+bracketleft exec xbacklight -dec 10
 
 mode "resize" {
-    bindsym h resize shrink width 10px
-    bindsym j resize grow height 10px
-    bindsym k resize shrink height 10px
-    bindsym l resize grow width 10px
-    bindsym Left resize shrink width 10px
-    bindsym Down resize grow height 10px
-    bindsym Up resize shrink height 10px
-    bindsym Right resize grow width 10px
+    bindsym Left resize shrink width 24px
+    bindsym Down resize grow height 24px
+    bindsym Up resize shrink height 24px
+    bindsym Right resize grow width 24px
+    bindsym h resize shrink width 24px
+    bindsym j resize grow height 24px
+    bindsym k resize shrink height 24px
+    bindsym l resize grow width 24px
     bindsym Return mode "default"
     bindsym Escape mode "default"
+    bindsym $mod+r mode "default"
 }
 bindsym $mod+r mode "resize"

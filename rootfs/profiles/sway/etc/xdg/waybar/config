@@ -12,7 +12,7 @@
   },
   "custom/launcher": {
     "format": "apps",
-    "on-click": "wofi --show drun"
+    "on-click": "systemctl --user start wofi-drun.service"
   },
   "clock": {
     "format": "{:%a %H:%M}",
@@ -44,6 +44,6 @@
   },
   "custom/power": {
     "format": "power",
-    "on-click": "wlogout"
+    "on-click": "systemctl --user start wlogout.service"
   }
 }
