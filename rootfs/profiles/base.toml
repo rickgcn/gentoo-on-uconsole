@@ -11,5 +11,6 @@ package_license = [
 ]
 
 system_services = [
+  "systemd-resolved.service",
   "sshd.service",
 ]

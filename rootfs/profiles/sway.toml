@@ -109,7 +109,7 @@ package_use = [
   "gui-wm/sway wallpapers swaybar swaynag -tray",
   "media-video/pipewire bluetooth pipewire-alsa pulseaudio sound-server ssl systemd v4l -system-service",
   "media-video/wireplumber systemd -system-service",
-  "net-misc/networkmanager tools -dhclient -dhcpcd",
+  "net-misc/networkmanager systemd tools -dhclient -dhcpcd -resolvconf",
   "net-wireless/blueman network",
   "net-wireless/bluez mesh obex readline",
   "sys-auth/seatd systemd -server",

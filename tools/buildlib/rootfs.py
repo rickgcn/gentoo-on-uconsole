@@ -378,6 +378,18 @@ def _install_gentoo_repository(config: BuildConfig, root: Path) -> None:
         safe_rmtree(target, root)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, target, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+    _write_gentoo_repository_config(config, root)
+
+
+def _write_gentoo_repository_config(config: BuildConfig, root: Path) -> None:
+    repository_config = (
+        "[gentoo]\n"
+        "location = /var/db/repos/gentoo\n"
+        "sync-type = git\n"
+        f"sync-uri = {config.rootfs.repository_url}\n"
+        "auto-sync = no\n"
+    )
+    _write_text(root / "etc/portage/repos.conf/gentoo.conf", repository_config)
 
 
 def _local_portage_repositories(config: BuildConfig) -> tuple[LocalPortageRepository, ...]:
@@ -775,6 +787,7 @@ def _write_generated_files(config: BuildConfig, identity: DiskIdentity, profile:
     _write_text(root / "etc/hostname", f"{config.rootfs.hostname}\n")
     _write_text(root / "etc/vconsole.conf", f"KEYMAP={config.rootfs.keymap}\n")
     _write_text(root / "etc/locale.conf", f"LANG={config.rootfs.locale}\n")
+    _write_symlink(root / "etc/resolv.conf", "../run/systemd/resolve/stub-resolv.conf")
     _write_text(root / "etc/timezone", f"{config.rootfs.timezone}\n")
     _write_text(root / "etc/env.d/02locale", f'LANG="{config.rootfs.locale}"\n')
     _ensure_line(root / "etc/locale.gen", f"{config.rootfs.locale} UTF-8")
@@ -883,16 +896,24 @@ def _install_build_resolv_conf(root: Path) -> Path | None:
     source = Path("/etc/resolv.conf")
     target = root / "etc/resolv.conf"
     backup = root / "etc/resolv.conf.gonu-backup"
-    if target.exists():
-        shutil.copy2(target, backup)
+    if backup.exists() or backup.is_symlink():
+        _safe_unlink(backup)
+    if target.exists() or target.is_symlink():
+        if target.is_symlink():
+            backup.symlink_to(os.readlink(target))
+        else:
+            shutil.copy2(target, backup)
+        _safe_unlink(target)
     if source.exists():
+        ensure_parent(target)
         shutil.copy2(source, target)
-    return backup if backup.exists() else None
+    return backup if backup.exists() or backup.is_symlink() else None
 
 
 def _restore_resolv_conf(root: Path, backup: Path | None) -> None:
     target = root / "etc/resolv.conf"
     if backup:
+        _safe_unlink(target)
         shutil.move(str(backup), target)
     else:
         _safe_unlink(target)
@@ -1063,6 +1084,13 @@ def _write_text(path: Path, content: str, *, mode: int = 0o644) -> None:
     ensure_parent(path)
     path.write_text(content, encoding="utf-8")
     path.chmod(mode)
+
+
+def _write_symlink(path: Path, target: str) -> None:
+    ensure_parent(path)
+    if path.exists() or path.is_symlink():
+        _safe_unlink(path)
+    path.symlink_to(target)
 
 
 def _ensure_line(path: Path, line: str) -> None:
