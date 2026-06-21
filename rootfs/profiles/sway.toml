@@ -1,6 +1,6 @@
 [profile]
 name = "sway"
-portage_profile = "default/linux/arm64/23.0/desktop"
+portage_profile = "default/linux/arm64/23.0/desktop/systemd"
 
 packages = [
   "app-arch/p7zip",
@@ -34,7 +34,6 @@ packages = [
   "gui-apps/wl-clipboard",
   "gui-apps/wlogout",
   "gui-apps/wofi",
-  "gui-libs/display-manager-init",
   "gui-libs/greetd",
   "gui-libs/xdg-desktop-portal-wlr",
   "gui-wm/sway",
@@ -67,10 +66,8 @@ packages = [
   "sys-apps/usbutils",
   "sys-apps/xdg-desktop-portal",
   "sys-apps/xdg-desktop-portal-gtk",
-  "sys-auth/elogind",
   "sys-auth/polkit",
   "sys-auth/rtkit",
-  "sys-auth/seatd",
   "sys-fs/exfatprogs",
   "sys-fs/ntfs3g",
   "sys-power/acpilight",
@@ -110,12 +107,12 @@ package_use = [
   "gui-apps/waybar backlight evdev mpris network tray upower",
   "gui-apps/wlogout bash-completion zsh-completion -fish-completion -man",
   "gui-wm/sway wallpapers swaybar swaynag -tray",
-  "media-video/pipewire pipewire-alsa ssl v4l -system-service",
-  "media-video/wireplumber -system-service",
+  "media-video/pipewire bluetooth pipewire-alsa pulseaudio sound-server ssl systemd v4l -system-service",
+  "media-video/wireplumber systemd -system-service",
   "net-misc/networkmanager tools -dhclient -dhcpcd",
   "net-wireless/blueman network",
   "net-wireless/bluez mesh obex readline",
-  "sys-auth/seatd -server",
+  "sys-auth/seatd systemd -server",
   "xfce-base/thunar -trash-panel-plugin",
 ]
 
@@ -140,24 +137,45 @@ accept_keywords = [
   "sys-power/acpilight **",
 ]
 
-services = [
-  { name = "dbus", runlevel = "default" },
-  { name = "elogind", runlevel = "boot" },
-  { name = "NetworkManager", runlevel = "default" },
-  { name = "bluetooth", runlevel = "default" },
-  { name = "chronyd", runlevel = "default" },
-  { name = "display-manager", runlevel = "default" },
-  { name = "acpilight", runlevel = "boot" },
+system_services = [
+  "NetworkManager.service",
+  "bluetooth.service",
+  "chronyd.service",
+  "greetd.service",
+]
+
+user_services = [
+  "pipewire.socket",
+  "pipewire-pulse.socket",
+  "wireplumber.service",
+  "swayidle.service",
+  "mako.service",
+  "waybar.service",
+  "polkit-gnome-authentication-agent-1.service",
+  "nm-applet.service",
+  "blueman-applet.service",
+  "xdg-user-dirs-update.service",
 ]
 
 files = [
-  { source = "sway/etc/conf.d/display-manager", target = "/etc/conf.d/display-manager", mode = "0644" },
-  { source = "sway/etc/elogind/logind.conf.d/10-power-key.conf", target = "/etc/elogind/logind.conf.d/10-power-key.conf", mode = "0644" },
+  { source = "sway/etc/environment.d/10-sway-session.conf", target = "/etc/environment.d/10-sway-session.conf", mode = "0644" },
   { source = "sway/etc/greetd/config.toml", target = "/etc/greetd/config.toml", mode = "0644" },
   { source = "sway/etc/greetd/environments", target = "/etc/greetd/environments", mode = "0644" },
   { source = "sway/etc/greetd/gtkgreet.css", target = "/etc/greetd/gtkgreet.css", mode = "0644" },
   { source = "sway/etc/greetd/sway-config", target = "/etc/greetd/sway-config", mode = "0644" },
+  { source = "sway/etc/polkit-1/rules.d/50-uconsole-power.rules", target = "/etc/polkit-1/rules.d/50-uconsole-power.rules", mode = "0644" },
   { source = "sway/etc/sway/config", target = "/etc/sway/config", mode = "0644" },
+  { source = "sway/etc/systemd/logind.conf.d/10-power-key.conf", target = "/etc/systemd/logind.conf.d/10-power-key.conf", mode = "0644" },
+  { source = "sway/etc/systemd/user/blueman-applet.service", target = "/etc/systemd/user/blueman-applet.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/mako.service", target = "/etc/systemd/user/mako.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/nm-applet.service", target = "/etc/systemd/user/nm-applet.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/polkit-gnome-authentication-agent-1.service", target = "/etc/systemd/user/polkit-gnome-authentication-agent-1.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/sway-session.target", target = "/etc/systemd/user/sway-session.target", mode = "0644" },
+  { source = "sway/etc/systemd/user/swayidle.service", target = "/etc/systemd/user/swayidle.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/waybar.service", target = "/etc/systemd/user/waybar.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/wlogout.service", target = "/etc/systemd/user/wlogout.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/wofi-drun.service", target = "/etc/systemd/user/wofi-drun.service", mode = "0644" },
+  { source = "sway/etc/systemd/user/xdg-user-dirs-update.service", target = "/etc/systemd/user/xdg-user-dirs-update.service", mode = "0644" },
   { source = "sway/etc/wlogout/layout", target = "/etc/wlogout/layout", mode = "0644" },
   { source = "sway/etc/wlogout/style.css", target = "/etc/wlogout/style.css", mode = "0644" },
   { source = "sway/etc/xdg/foot/foot.ini", target = "/etc/xdg/foot/foot.ini", mode = "0644" },
@@ -167,4 +185,5 @@ files = [
   { source = "sway/etc/xdg/waybar/config", target = "/etc/xdg/waybar/config", mode = "0644" },
   { source = "sway/etc/xdg/waybar/style.css", target = "/etc/xdg/waybar/style.css", mode = "0644" },
   { source = "sway/etc/xdg/xdg-desktop-portal/sway-portals.conf", target = "/etc/xdg/xdg-desktop-portal/sway-portals.conf", mode = "0644" },
+  { source = "sway/usr/local/bin/uconsole-swayidle", target = "/usr/local/bin/uconsole-swayidle", mode = "0755" },
 ]

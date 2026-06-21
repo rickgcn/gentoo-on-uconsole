@@ -1,0 +1,9 @@
+[Unit]
+Description=Wofi application launcher
+PartOf=sway-session.target graphical-session.target
+After=sway-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/wofi --show drun
+SuccessExitStatus=1 130

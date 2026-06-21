@@ -1,3 +1,0 @@
-# We use greetd through Gentoo's display-manager OpenRC service.
-CHECKVT=7
-DISPLAYMANAGER="greetd"

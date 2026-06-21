@@ -1,0 +1,12 @@
+[Unit]
+Description=Update XDG user directories
+PartOf=sway-session.target graphical-session.target
+After=sway-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/xdg-user-dirs-update
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sway-session.target

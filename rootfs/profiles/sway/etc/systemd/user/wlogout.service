@@ -1,0 +1,9 @@
+[Unit]
+Description=Wlogout power menu
+PartOf=sway-session.target graphical-session.target
+After=sway-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/wlogout
+SuccessExitStatus=1 130

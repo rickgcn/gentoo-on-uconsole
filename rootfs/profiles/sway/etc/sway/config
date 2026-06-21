@@ -34,14 +34,8 @@ input * {
 
 output * bg $bg solid_color
 
-exec_always dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP SWAYSOCK
-exec xdg-user-dirs-update
-exec gentoo-pipewire-launcher
-exec /usr/libexec/polkit-gnome-authentication-agent-1
-exec mako
-exec nm-applet --indicator
-exec blueman-applet
-exec swayidle -w timeout 300 'swaylock -f -c 101418' timeout 600 'swaymsg "output * power off"' resume 'swaymsg "output * power on"' before-sleep 'swaylock -f -c 101418'
+exec "export XDG_CURRENT_DESKTOP=sway XDG_SESSION_DESKTOP=sway XDG_SESSION_TYPE=wayland MOZ_ENABLE_WAYLAND=1 QT_QPA_PLATFORM=wayland SDL_VIDEODRIVER=wayland _JAVA_AWT_WM_NONREPARENTING=1; systemctl --user import-environment DISPLAY WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE MOZ_ENABLE_WAYLAND QT_QPA_PLATFORM SDL_VIDEODRIVER _JAVA_AWT_WM_NONREPARENTING; dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE MOZ_ENABLE_WAYLAND QT_QPA_PLATFORM SDL_VIDEODRIVER _JAVA_AWT_WM_NONREPARENTING; systemctl --user start sway-session.target"
+exec swaymsg -t subscribe '["shutdown"]' && systemctl --user stop sway-session.target
 
 bindsym $mod+Return exec $term
 bindsym $mod+d exec $menu
@@ -128,7 +122,3 @@ mode "resize" {
     bindsym Escape mode "default"
 }
 bindsym $mod+r mode "resize"
-
-bar {
-    swaybar_command waybar
-}

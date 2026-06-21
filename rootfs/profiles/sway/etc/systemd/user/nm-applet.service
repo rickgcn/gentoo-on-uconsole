@@ -1,0 +1,11 @@
+[Unit]
+Description=NetworkManager applet
+PartOf=sway-session.target graphical-session.target
+After=sway-session.target
+
+[Service]
+ExecStart=/usr/bin/nm-applet --indicator
+Restart=on-failure
+
+[Install]
+WantedBy=sway-session.target

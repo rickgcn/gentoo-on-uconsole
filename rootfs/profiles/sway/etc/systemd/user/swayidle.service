@@ -1,0 +1,11 @@
+[Unit]
+Description=Sway idle manager
+PartOf=sway-session.target graphical-session.target
+After=sway-session.target
+
+[Service]
+ExecStart=/usr/local/bin/uconsole-swayidle
+Restart=on-failure
+
+[Install]
+WantedBy=sway-session.target
