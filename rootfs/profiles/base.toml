@@ -10,7 +10,6 @@ package_license = [
   "sys-kernel/linux-firmware *",
 ]
 
-services = [
-  { name = "ssh-hostkeys", runlevel = "default" },
-  { name = "sshd", runlevel = "default" },
+system_services = [
+  "sshd.service",
 ]

@@ -35,7 +35,6 @@ USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*[$]?$")
 CHROOT_MOUNT_NAMES = ("proc", "sys", "dev", "run", "var/cache/distfiles", "var/cache/binpkgs")
 ROOTFS_PROFILE_DIR = Path("rootfs/profiles")
 BASE_PROFILE = "base"
-SERVICE_RUNLEVELS = ("boot", "default", "nonetwork", "shutdown", "sysinit")
 LOCAL_REPOSITORY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 EMERGE_ROOTFS_INSTALL_OPTIONS = (
     "--usepkg=y",
@@ -67,7 +66,6 @@ EMERGE_ROOTFS_REBUILD_OPTIONS = (
 @dataclass(frozen=True)
 class RootfsService:
     name: str
-    runlevel: str
 
 
 @dataclass(frozen=True)
@@ -103,7 +101,8 @@ class RootfsProfile:
     package_use: tuple[str, ...]
     accept_keywords: tuple[str, ...]
     package_license: tuple[str, ...]
-    services: tuple[RootfsService, ...]
+    system_services: tuple[RootfsService, ...]
+    user_services: tuple[RootfsService, ...]
     files: tuple[RootfsProfileFile, ...]
 
 
@@ -268,6 +267,8 @@ def build_rootfs(config: BuildConfig, *, force: bool = False, prepare: bool = Tr
                 "package_use": list(profile.package_use),
                 "packages": list(profile.packages),
                 "rebuild": list(profile.rebuild),
+                "system_services": [service.name for service in profile.system_services],
+                "user_services": [service.name for service in profile.user_services],
             },
             "disk": {
                 "partition_table": identity.partition_table,
@@ -493,16 +494,20 @@ def _load_rootfs_profile_file(config: BuildConfig, name: str) -> RootfsProfile:
         package_use=_string_tuple(profile_data, "package_use"),
         accept_keywords=_string_tuple(profile_data, "accept_keywords"),
         package_license=_string_tuple(profile_data, "package_license"),
-        services=_profile_services(profile_data),
+        system_services=_profile_services(profile_data, "system_services"),
+        user_services=_profile_services(profile_data, "user_services"),
         files=_profile_files(path, profile_data),
     )
 
 
 def _merge_rootfs_profiles(profiles: list[RootfsProfile]) -> RootfsProfile:
-    services: dict[str, RootfsService] = {}
+    system_services: dict[str, RootfsService] = {}
+    user_services: dict[str, RootfsService] = {}
     for profile in profiles:
-        for service in profile.services:
-            services[service.name] = service
+        for service in profile.system_services:
+            system_services[service.name] = service
+        for service in profile.user_services:
+            user_services[service.name] = service
     portage_profiles = _dedupe(profile.portage_profile for profile in profiles if profile.portage_profile)
     if len(portage_profiles) > 1:
         joined = ", ".join(portage_profiles)
@@ -520,7 +525,8 @@ def _merge_rootfs_profiles(profiles: list[RootfsProfile]) -> RootfsProfile:
         package_use=_dedupe(item for profile in profiles for item in profile.package_use),
         accept_keywords=_dedupe(item for profile in profiles for item in profile.accept_keywords),
         package_license=_dedupe(item for profile in profiles for item in profile.package_license),
-        services=tuple(services.values()),
+        system_services=tuple(system_services.values()),
+        user_services=tuple(user_services.values()),
         files=tuple(item for profile in profiles for item in profile.files),
     )
 
@@ -605,22 +611,22 @@ def _merge_make_conf(values: object) -> tuple[RootfsMakeConf, ...]:
     return tuple(RootfsMakeConf(key=key, value=value) for key, value in settings.items())
 
 
-def _profile_services(data: dict[str, object]) -> tuple[RootfsService, ...]:
-    values = data.get("services", [])
+def _profile_services(data: dict[str, object], key: str) -> tuple[RootfsService, ...]:
+    values = data.get(key, [])
     if not isinstance(values, list):
-        raise BuildError("rootfs profile services must be a list")
+        raise BuildError(f"rootfs profile {key} must be a list")
     services = []
     for value in values:
-        if not isinstance(value, dict):
-            raise BuildError("rootfs profile service entries must be tables")
-        name = value.get("name")
-        runlevel = value.get("runlevel")
-        if not isinstance(name, str) or not name:
-            raise BuildError("rootfs profile service.name must be a non-empty string")
-        if not isinstance(runlevel, str) or runlevel not in SERVICE_RUNLEVELS:
-            raise BuildError(f"rootfs profile service.runlevel is invalid for {name}: {runlevel}")
-        services.append(RootfsService(name=name, runlevel=runlevel))
+        if not isinstance(value, str) or not value:
+            raise BuildError(f"rootfs profile {key} entries must be non-empty strings")
+        services.append(RootfsService(name=_systemd_unit_name(value)))
     return tuple(services)
+
+
+def _systemd_unit_name(value: str) -> str:
+    if "/" in value or value in {".", ".."} or not value.endswith((".service", ".socket", ".target")):
+        raise BuildError(f"rootfs profile systemd unit name is invalid: {value}")
+    return value
 
 
 def _profile_files(profile_path: Path, data: dict[str, object]) -> tuple[RootfsProfileFile, ...]:
@@ -766,8 +772,9 @@ def _write_generated_files(config: BuildConfig, identity: DiskIdentity, profile:
             f"PARTUUID={identity.boot_partuuid} /boot vfat defaults,noatime 0 2\n"
         ),
     )
-    _write_text(root / "etc/conf.d/hostname", f'hostname="{config.rootfs.hostname}"\n')
-    _write_text(root / "etc/conf.d/keymaps", f'keymap="{config.rootfs.keymap}"\n')
+    _write_text(root / "etc/hostname", f"{config.rootfs.hostname}\n")
+    _write_text(root / "etc/vconsole.conf", f"KEYMAP={config.rootfs.keymap}\n")
+    _write_text(root / "etc/locale.conf", f"LANG={config.rootfs.locale}\n")
     _write_text(root / "etc/timezone", f"{config.rootfs.timezone}\n")
     _write_text(root / "etc/env.d/02locale", f'LANG="{config.rootfs.locale}"\n')
     _ensure_line(root / "etc/locale.gen", f"{config.rootfs.locale} UTF-8")
@@ -775,27 +782,6 @@ def _write_generated_files(config: BuildConfig, identity: DiskIdentity, profile:
     _write_profile_portage_config(profile, root)
     _install_profile_files(profile, root)
     _write_text(root / "etc/sudoers.d/wheel", "%wheel ALL=(ALL:ALL) ALL\n", mode=0o440)
-    _write_text(
-        root / "etc/init.d/ssh-hostkeys",
-        (
-            "#!/sbin/openrc-run\n"
-            "\n"
-            'description="Generate SSH host keys on first boot"\n'
-            "\n"
-            "depend() {\n"
-            "    before sshd\n"
-            "}\n"
-            "\n"
-            "start() {\n"
-            "    if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then\n"
-            '        ebegin "Generating SSH host keys"\n'
-            "        ssh-keygen -A\n"
-            "        eend $?\n"
-            "    fi\n"
-            "}\n"
-        ),
-        mode=0o755,
-    )
 
 
 def _user_groups(config: BuildConfig, profile: RootfsProfile) -> tuple[str, ...]:
@@ -1035,12 +1021,15 @@ def _chroot_script(config: BuildConfig, profile: RootfsProfile, has_authorized_k
         [
             "locale-gen",
             "env-update",
+            f"ln -snf {sh_quote('/usr/share/zoneinfo/' + config.rootfs.timezone)} /etc/localtime",
+            ": > /etc/machine-id",
             "rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub",
-            "add_service() { rc-update show \"$2\" | awk '{ print $1 }' | grep -qx \"$1\" || rc-update add \"$1\" \"$2\"; }",
         ]
     )
-    for service in profile.services:
-        lines.append(f"add_service {sh_quote(service.name)} {sh_quote(service.runlevel)}")
+    if profile.system_services:
+        lines.append("systemctl enable " + sh_quote_list(tuple(service.name for service in profile.system_services)))
+    if profile.user_services:
+        lines.append("systemctl --global enable " + sh_quote_list(tuple(service.name for service in profile.user_services)))
     return "\n".join(lines) + "\n"
 
 
